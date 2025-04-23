@@ -8,19 +8,17 @@ export const themes: { [key: string] : {
     card: string,
     danger: string,
     success: string,
-    inner: string
   }} = {
     light: {
-      background: '#F9F9F9',
-      text: '#1A1D23',
+      background: '#FFF',
+      text: '#000',
       textSecondary: '#6E6E73',
-      primary: '#3498DB',
+      primary: '#FFE9E1',
       secondary: '#9B51E0',
       border: '#E1E1E1',
-      card: '#FFFFFF',
+      card: '#FFE9E1',
       danger: '#E74C3C',
       success: '#27AE60',
-      inner: '#FFF',
     },
     dark: {
       background: '#1A1D23',
@@ -32,6 +30,5 @@ export const themes: { [key: string] : {
       card: '#242526',
       danger: '#E74C3C',
       success: '#27AE60',
-      inner: '#242526'
     },
   };
