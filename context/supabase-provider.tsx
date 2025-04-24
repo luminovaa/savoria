@@ -107,7 +107,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
     const inProtectedGroup = segments[1] === "(protected)";
 
     if (session && !inProtectedGroup) {
-      router.replace("/(app)/(protected)");
+      router.replace("/(app)/(protected)/home");
     } else if (!session) {
       router.replace("/(app)/sign-in");
     }
