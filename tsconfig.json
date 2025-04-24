@@ -15,5 +15,5 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-  ]
+, "app/(app)/(protected)/settings/_component/section.tsz"  ]
 }

@@ -1,6 +1,7 @@
 import React from "react";
 import { View, StyleSheet, Text, ScrollView } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
+import MainCardMenu from "@/components/home/type-card";
 
 export default function HomeScreen() {
   const { colors } = useTheme();
@@ -10,6 +11,34 @@ export default function HomeScreen() {
       flex: 1,
       paddingTop: 20,
       backgroundColor: colors.background,
+    },
+    mainContainer: {
+      flex: 1,
+      justifyContent: "space-between",
+      flexDirection: "row",
+    },
+    cardTypeContainer: {
+      backgroundColor: colors.card,
+      borderRadius: 10,
+      padding: 20,
+      marginBottom: 20,
+      left: 20,
+      elevation:2,
+    },
+    cardMenuContainer:{
+      backgroundColor: colors.card,
+      borderRadius: 10,
+      padding: 20,
+      marginBottom: 20,
+      elevation:2,
+    },
+    cardInvoiceContainer: {
+      backgroundColor: colors.card,
+      borderRadius: 10,
+      padding: 20,
+      right: 20,
+      marginBottom: 20,
+      elevation:2,
     },
     text: {
       fontSize: 24,
@@ -34,10 +63,14 @@ export default function HomeScreen() {
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
     >
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          Home
-        </Text>
+      <View style={styles.mainContainer}>
+        <View style={styles.cardTypeContainer}>
+          
+        </View>
+        <MainCardMenu/>
+        <View style={styles.cardInvoiceContainer}>
+          
+        </View>
       </View>
     </ScrollView>
   );

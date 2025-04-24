@@ -24,7 +24,7 @@ export default function AppLayout() {
   return (
     <SupabaseProvider>
       <ThemeProvider>
-        <StatusBar style={theme === "dark" ? "light" : "dark"} />
+        <StatusBar style={theme === "dark" ? "light" : "dark"} hidden={true} />
         <RootLayoutNav />
       </ThemeProvider>
     </SupabaseProvider>

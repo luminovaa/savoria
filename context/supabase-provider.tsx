@@ -109,7 +109,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
     if (session && !inProtectedGroup) {
       router.replace("/(app)/(protected)");
     } else if (!session) {
-      router.replace("/(app)/welcome");
+      router.replace("/(app)/sign-in");
     }
   }, [initialized, appIsReady, session]);
 
