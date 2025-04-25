@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, StyleSheet, Text, ScrollView, Dimensions } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import MainCardMenu from "./_component/menu-card";
@@ -7,6 +7,7 @@ import TypeCard from "./_component/type-card";
 export default function HomeScreen() {
   const { colors } = useTheme();
   const screenWidth = Dimensions.get('window').width;
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
   const styles = StyleSheet.create({
     container: {
@@ -54,20 +55,26 @@ export default function HomeScreen() {
       paddingBottom: 30,
     },
   });
-
+  const handleCategorySelect = (categoryId: number | null) => {
+    setSelectedCategory(selectedCategory === categoryId ? null : categoryId);
+  };
+  
   return (
     <View style={styles.container}>
       <View style={styles.layout}>
         <View style={styles.leftSidebar}>
           <View style={styles.cardTypeContainer}>
-            <TypeCard />
+            <TypeCard 
+              selectedCategory={selectedCategory}
+              onCategorySelect={handleCategorySelect}
+            />
           </View>
         </View>
         
         <View style={styles.contentArea}>
           <ScrollView contentContainerStyle={styles.contentContainer}>
             <View style={styles.cardMenuContainer}>
-              <MainCardMenu />
+              <MainCardMenu selectedCategory={selectedCategory} />
             </View>
           </ScrollView>
         </View>

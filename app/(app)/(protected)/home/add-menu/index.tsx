@@ -10,7 +10,6 @@ import {
   Alert,
   SafeAreaView,
   Image,
-  Modal,
   FlatList,
 } from "react-native";
 import { supabase } from "@/utils/supabase";
@@ -20,6 +19,7 @@ import { useRouter } from "expo-router";
 import { z } from "zod";
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
+import CategoryModal from "./_component/category-modal";
 
 // Schema validasi untuk form menu
 const menuFormSchema = z.object({
@@ -38,14 +38,6 @@ type MenuFormData = z.infer<typeof menuFormSchema>;
 interface Category {
   id: number;
   name_category: string;
-}
-
-interface Bucket {
-  id: string;
-  name: string;
-  public: boolean;
-  file_size_limit: number;
-  allowed_mime_types: string[];
 }
 
 export default function AddMenuScreen() {
@@ -121,29 +113,24 @@ export default function AddMenuScreen() {
 
   const uploadImage = async (uri: string) => {
     try {
-      // Upload gambar
+      // Ambil data gambar
       const response = await fetch(uri);
       const arraybuffer = await response.arrayBuffer();
       
-      // Cek ukuran file (5MB)
+      // Validasi ukuran file (5MB)
       if (arraybuffer.byteLength > 5 * 1024 * 1024) {
         throw new Error('Ukuran file terlalu besar. Maksimal 5MB');
       }
-
-      // Cek tipe file
+  
+      // Validasi tipe file
       const fileType = uri.split('.').pop()?.toLowerCase() ?? 'jpeg';
       if (!['jpeg', 'png', 'jpg'].includes(fileType)) {
         throw new Error('Tipe file tidak didukung. Gunakan JPEG, PNG, atau JPG');
       }
-
+  
       const fileName = `menu-${Date.now()}.${fileType}`;
       
-      console.log('Uploading file:', {
-        fileName,
-        fileType,
-        fileSize: arraybuffer.byteLength
-      });
-
+      // Unggah ke bucket 'file'
       const { data, error } = await supabase.storage
         .from('file')
         .upload(fileName, arraybuffer, {
@@ -151,24 +138,18 @@ export default function AddMenuScreen() {
           cacheControl: '3600',
           upsert: false
         });
-
+  
       if (error) {
-        console.error('Error uploading image:', error);
         throw new Error('Gagal mengupload gambar: ' + error.message);
       }
-
-      console.log('File uploaded successfully:', data);
-
-      // Dapatkan URL publik
+  
+      // Ambil URL publik
       const { data: { publicUrl } } = supabase.storage
         .from('file')
         .getPublicUrl(fileName);
-
-      console.log('Public URL:', publicUrl);
-
+  
       return publicUrl;
     } catch (error: any) {
-      console.error('Upload image error:', error);
       throw new Error('Gagal mengupload gambar: ' + error.message);
     }
   };
@@ -204,21 +185,6 @@ export default function AddMenuScreen() {
       if (image) {
         imageUrl = await uploadImage(image);
       }
-
-      // Debug: Log data yang akan disimpan
-      console.log('Data menu yang akan disimpan:', {
-        name_menu: form.name_menu.trim(),
-        description: form.description.trim(),
-        price: form.price,
-        category_id: form.category_id,
-        images: imageUrl,
-        promo: form.promo,
-        promo_price: form.promo ? form.promo_price : null,
-        promo_start: form.promo ? form.promo_start : null,
-        promo_end: form.promo ? form.promo_end : null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
 
       const { error } = await supabase
         .from('menu')
@@ -482,44 +448,18 @@ export default function AddMenuScreen() {
         </View>
       </ScrollView>
 
-      {/* Category Modal */}
-      <Modal
+      {/* Use the new CategoryModal component */}
+      <CategoryModal
         visible={showCategoryModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowCategoryModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Pilih Kategori</Text>
-              <TouchableOpacity
-                onPress={() => setShowCategoryModal(false)}
-                style={styles.closeButton}
-              >
-                <Feather name="x" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={categories}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.categoryItem,
-                    { borderBottomColor: colors.border },
-                  ]}
-                  onPress={() => selectCategory(item)}
-                >
-                  <Text style={[styles.categoryItemText, { color: colors.text }]}>
-                    {item.name_category}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setShowCategoryModal(false)}
+        onSelect={selectCategory}
+        categories={categories}
+        colors={{
+          text: colors.text,
+          card: colors.card,
+          border: colors.border,
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -637,37 +577,5 @@ const styles = StyleSheet.create({
   promoLabel: {
     fontSize: 14,
     marginBottom: 5,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: '80%',
-    maxHeight: '80%',
-    borderRadius: 8,
-    padding: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  closeButton: {
-    padding: 5,
-  },
-  categoryItem: {
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-  },
-  categoryItemText: {
-    fontSize: 16,
   },
 });

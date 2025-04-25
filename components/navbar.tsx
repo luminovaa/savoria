@@ -88,7 +88,7 @@ const Navbar = () => {
       height: 80,
       borderBottomWidth: 1,
       paddingHorizontal: 16,
-      backgroundColor: colors.background,
+      backgroundColor: colors.card,
       borderBottomColor: colors.border,
     },
     logo: {

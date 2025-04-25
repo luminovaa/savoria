@@ -335,15 +335,6 @@ export default function AddUserScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Feather name="arrow-left" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Tambah Pengguna</Text>
-        </View>
         <View style={styles.content}>
           {error && (
             <View style={styles.errorContainer}>

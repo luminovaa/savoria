@@ -39,3 +39,19 @@ export type Role = {
     id: number;
     name: string;
 };
+
+export type  MenuItem = {
+  id: number;
+  name_menu: string;
+  description: string;
+  price: number;
+  category_id: number;
+  images: string;
+  promo: boolean;
+  promo_price: number | null;
+  promo_start: string | null;
+  promo_end: string | null;
+  created_at: string;
+  updated_at: string;
+  isAddButton?: boolean;
+}

@@ -8,6 +8,7 @@ import {
   Alert,
   SafeAreaView,
   TouchableOpacity,
+  RefreshControl,
 } from "react-native";
 import { supabase } from "@/utils/supabase";
 import { useTheme } from "@/hooks/use-theme";
@@ -21,6 +22,7 @@ export default function UsersListScreen() {
   const [users, setUsers] = useState<UserList[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -37,7 +39,7 @@ export default function UsersListScreen() {
 
       const { data: profilesData, error: profilesError } = (await supabase
         .from("profiles")
-        .select(` id, first_name, last_name, role_id, role (name) `)) as {
+        .select(`id, first_name, last_name, role_id, role (name)`)) as {
         data: ProfileWithRole[];
         error: any;
       };
@@ -45,6 +47,7 @@ export default function UsersListScreen() {
       if (profilesError) {
         throw profilesError;
       }
+
       const combinedUsers = authData.users.map((user) => {
         const profile = profilesData.find((p) => p.id === user.id);
         return {
@@ -62,8 +65,15 @@ export default function UsersListScreen() {
       Alert.alert("Error", "Gagal memuat daftar pengguna: " + error.message);
     } finally {
       setLoading(false);
+      setRefreshing(false); 
     }
   }
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchUsers(); 
+  };
+
   const handleAddCashier = () => {
     router.push("/(app)/(protected)/cashier/add-user");
   };
@@ -121,7 +131,6 @@ export default function UsersListScreen() {
       if (error) {
         throw error;
       }
-      // Remove user from state
       setUsers(users.filter((user) => user.id !== userId));
       Alert.alert("Sukses", "Pengguna berhasil dihapus");
     } catch (error: any) {
@@ -217,9 +226,6 @@ export default function UsersListScreen() {
       color: colors.error,
       textAlign: "center",
     },
-    backButton: {
-      padding: 8,
-    },
     addButtonContainer: {
       position: "absolute",
       bottom: 80,
@@ -274,6 +280,14 @@ export default function UsersListScreen() {
           renderItem={renderUserItem}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]} 
+              tintColor={colors.primary}
+            />
+          }
           ListEmptyComponent={
             <Text
               style={[
