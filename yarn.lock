@@ -1503,6 +1503,11 @@
   dependencies:
     merge-options "^3.0.4"
 
+"@react-native-picker/picker@^2.11.0":
+  version "2.11.0"
+  resolved "https://registry.yarnpkg.com/@react-native-picker/picker/-/picker-2.11.0.tgz#4587fbce6a382adedad74311e96ee10bb2b2d63a"
+  integrity sha512-QuZU6gbxmOID5zZgd/H90NgBnbJ3VV6qVzp6c7/dDrmWdX8S0X5YFYgDcQFjE3dRen9wB9FWnj2VVdPU64adSg==
+
 "@react-native/assets-registry@0.76.9":
   version "0.76.9"
   resolved "https://registry.yarnpkg.com/@react-native/assets-registry/-/assets-registry-0.76.9.tgz#ec63d32556c29bfa29e55b5e6e24c9d6e1ebbfac"
@@ -6098,6 +6103,11 @@ react-is@^16.13.1, react-is@^16.7.0:
   version "16.13.1"
   resolved "https://registry.yarnpkg.com/react-is/-/react-is-16.13.1.tgz#789729a4dc36de2999dc156dd6c1d9c18cea56a4"
   integrity sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==
+
+react-native-device-info@^14.0.4:
+  version "14.0.4"
+  resolved "https://registry.yarnpkg.com/react-native-device-info/-/react-native-device-info-14.0.4.tgz#56b24ace9ff29a66bdfc667209086421ed6cfdce"
+  integrity sha512-NX0wMAknSDBeFnEnSFQ8kkAcQrFHrG4Cl0mVjoD+0++iaKrOupiGpBXqs8xR0SeJyPC5zpdPl4h/SaBGly6UxA==
 
 react-native-gesture-handler@~2.20.2:
   version "2.20.2"

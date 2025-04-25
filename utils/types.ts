@@ -5,8 +5,26 @@ export type User = {
     name?: string;
     password?: string;
     last_sign_in_at?: string;
-    
+    role: Role | Role[];
 }
+
+export type UserList = {
+    id: string;
+    email: string;
+    last_sign_in_at?: string;
+    first_name?: string;
+    last_name?: string;
+    role?: Role;
+    role_name?: string;
+};
+
+export type ProfileWithRole = {
+    id: string;
+    first_name?: string;
+    last_name?: string;
+    role_id?: string;
+    role?: { name: string };  // This matches the structure from your Supabase query
+  }
 
 export type Shop = {
     id?: string;
@@ -18,6 +36,6 @@ export type Shop = {
 }
 
 export type Role = {
-    id: string;
+    id: number;
     name: string;
-  };
+};

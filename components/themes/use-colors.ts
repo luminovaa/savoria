@@ -1,4 +1,16 @@
-export const themes = {
+export const themes: {[ key : string] : {
+  background: string,
+  text: string,
+  textSecondary: string,
+  primary: string,
+  secondary: string,
+  border: string,
+  card: string,
+  error: string,
+  accent: string,
+  highlight: string,
+  success: string,
+}} = {
   light: {
     background: '#F9F9F9',
     text: '#2D2A2A',
