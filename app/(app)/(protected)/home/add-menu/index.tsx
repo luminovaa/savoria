@@ -37,7 +37,7 @@ type MenuFormData = z.infer<typeof menuFormSchema>;
 
 interface Category {
   id: number;
-  name: string;
+  name_category: string;
 }
 
 interface Bucket {
@@ -55,7 +55,7 @@ export default function AddMenuScreen() {
     name_menu: "",
     description: "",
     price: 0,
-    category_id: 1,
+    category_id: 0,
     promo: false,
     promo_price: 0,
     promo_start: "",
@@ -84,8 +84,8 @@ export default function AddMenuScreen() {
     try {
       const { data, error } = await supabase
         .from('category')
-        .select('id, name')
-        .order('name');
+        .select('id, name_category')
+        .order('name_category');
       
       if (error) throw error;
       
@@ -123,30 +123,31 @@ export default function AddMenuScreen() {
     try {
       // Upload gambar
       const response = await fetch(uri);
-      const blob = await response.blob();
+      const arraybuffer = await response.arrayBuffer();
       
       // Cek ukuran file (5MB)
-      if (blob.size > 5 * 1024 * 1024) {
+      if (arraybuffer.byteLength > 5 * 1024 * 1024) {
         throw new Error('Ukuran file terlalu besar. Maksimal 5MB');
       }
 
       // Cek tipe file
-      const fileType = blob.type;
-      if (!['image/jpeg', 'image/png', 'image/jpg'].includes(fileType)) {
+      const fileType = uri.split('.').pop()?.toLowerCase() ?? 'jpeg';
+      if (!['jpeg', 'png', 'jpg'].includes(fileType)) {
         throw new Error('Tipe file tidak didukung. Gunakan JPEG, PNG, atau JPG');
       }
 
-      const fileName = `menu-${Date.now()}.${fileType.split('/')[1]}`;
+      const fileName = `menu-${Date.now()}.${fileType}`;
       
       console.log('Uploading file:', {
         fileName,
         fileType,
-        fileSize: blob.size
+        fileSize: arraybuffer.byteLength
       });
 
       const { data, error } = await supabase.storage
         .from('file')
-        .upload(fileName, blob, {
+        .upload(fileName, arraybuffer, {
+          contentType: `image/${fileType}`,
           cacheControl: '3600',
           upsert: false
         });
@@ -388,7 +389,7 @@ export default function AddMenuScreen() {
               onPress={() => setShowCategoryModal(true)}
             >
               <Text style={{ color: selectedCategory ? colors.text : colors.textSecondary }}>
-                {selectedCategory ? selectedCategory.name : "Pilih kategori"}
+                {selectedCategory ? selectedCategory.name_category : "Pilih kategori"}
               </Text>
               <Feather name="chevron-down" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -511,7 +512,7 @@ export default function AddMenuScreen() {
                   onPress={() => selectCategory(item)}
                 >
                   <Text style={[styles.categoryItemText, { color: colors.text }]}>
-                    {item.name}
+                    {item.name_category}
                   </Text>
                 </TouchableOpacity>
               )}

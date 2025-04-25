@@ -9,8 +9,9 @@ export default function TypeCard() {
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      flexDirection: "column",
-      justifyContent: "flex-start",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-around",
       alignItems: "center",
       padding: 15,
       borderRadius: 20,
@@ -24,14 +25,16 @@ export default function TypeCard() {
       paddingVertical: 15,
       paddingHorizontal: 7,
       marginVertical: 8,
-      width: 80, 
+      width: "22%",
+      minWidth: 80,
+      maxWidth: 100,
     },
     iconContainer: {
-      marginBottom: 8, 
+      marginBottom: 8,
     },
     text: {
       color: colors.textSecondary,
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: "500",
       textAlign: "center",
     },
