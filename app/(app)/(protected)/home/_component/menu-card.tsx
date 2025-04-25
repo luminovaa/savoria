@@ -1,42 +1,73 @@
-import React, { useState } from "react";
-import { View, Text, Image, TouchableOpacity, FlatList, StyleSheet, Dimensions } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Text, Image, TouchableOpacity, FlatList, StyleSheet, Dimensions, ActivityIndicator } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { useRouter } from "expo-router";
+import { supabase } from "@/utils/supabase";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 interface MenuItem {
-  id: string;
-  name?: string;
-  price?: number;
-  image?: string;
+  id: number;
+  name_menu: string;
+  description: string;
+  price: number;
+  category_id: number;
+  images: string;
+  promo: boolean;
+  promo_price: number | null;
+  promo_start: string | null;
+  promo_end: string | null;
+  created_at: string;
+  updated_at: string;
   isAddButton?: boolean;
 }
 
-const menuItems: MenuItem[] = [
-  { id: "1", name: "Cheese & Tomato Pizza", price: 40.5, image: "https://placehold.co/400" },
-  { id: "2", name: "Smoky Ham & Cheese", price: 10.0, image: "https://placehold.co/400" },
-  { id: "3", name: "Poached Egg & Bacon", price: 40.5, image: "https://placehold.co/400" },
-  { id: "4", name: "Pesto Pasta Salad", price: 10.0, image: "https://placehold.co/400" },
-  { id: "5", name: "Vegan Meatball Wrap", price: 10.0, image: "https://placehold.co/400" },
-  { id: "6", name: "Vegan BBQ Chick'n Panini", price: 40.5, image: "https://placehold.co/400" },
-  { id: "7", name: "Creamy Mac & Cheese", price: 10.0, image: "https://placehold.co/400" },
-  { id: "8", name: "Coronation Toastie", price: 10.0, image: "https://placehold.co/400" },
-  { id: "9", name: "Margherita Pizza", price: 35.0, image: "https://placehold.co/400" },
-  { id: "10", name: "Turkey & Swiss", price: 12.0, image: "https://placehold.co/400" },
-  { id: "11", name: "Avocado Toast", price: 15.0, image: "https://placehold.co/400" },
-  { id: "12", name: "Caesar Salad", price: 8.0, image: "https://placehold.co/400" },
-  { id: "13", name: "Chicken Wrap", price: 9.5, image: "https://placehold.co/400" },
-  { id: "14", name: "BBQ Pulled Pork", price: 45.0, image: "https://placehold.co/400" },
-  { id: "15", name: "Macaroni Salad", price: 7.0, image: "https://placehold.co/400" },
-  { id: "16", name: "Egg & Cheese Muffin", price: 6.0, image: "https://placehold.co/400" },
-  { id: "17", name: "Tambah Menu", isAddButton: true },
-];
-
 export default function MainCardMenu() {
   const [cart, setCart] = useState<{ [id: string]: number }>({});
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const { colors } = useTheme();
   const router = useRouter();
+
+  useEffect(() => {
+    fetchMenuItems();
+  }, []);
+
+  const fetchMenuItems = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('menu')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const items = data || [];
+      setMenuItems([
+        ...items,
+        {
+          id: 0,
+          name_menu: "Tambah Menu",
+          description: "",
+          price: 0,
+          category_id: 0,
+          images: "",
+          promo: false,
+          promo_price: null,
+          promo_start: null,
+          promo_end: null,
+          created_at: "",
+          updated_at: "",
+          isAddButton: true
+        }
+      ]);
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const updateQuantity = (id: string, delta: number) => {
     setCart((prevCart) => {
@@ -61,7 +92,7 @@ export default function MainCardMenu() {
   };
 
   const renderItem = ({ item }: { item: MenuItem }) => {
-    if (item.isAddButton) {
+    if (item.id === 0) {
       return (
         <TouchableOpacity
           style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -75,27 +106,32 @@ export default function MainCardMenu() {
       );
     }
 
-    const quantity = cart[item.id] || 0;
+    const quantity = cart[item.id.toString()] || 0;
     return (
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Image source={{ uri: item.image }} style={styles.image} />
+        <Image source={{ uri: item.images }} style={styles.image} />
         <Text style={[styles.name, { color: colors.text }]} numberOfLines={2}>
-          {item.name}
+          {item.name_menu}
         </Text>
         <Text style={[styles.price, { color: colors.textSecondary }]}>
-          ${item.price!.toFixed(2)}
+          Rp {item.price.toLocaleString()}
         </Text>
+        {item.promo && (
+          <Text style={[styles.promoPrice, { color: colors.primary }]}>
+            Promo: Rp {item.promo_price?.toLocaleString()}
+          </Text>
+        )}
         {quantity > 0 ? (
           <View style={styles.quantityContainer}>
             <TouchableOpacity
-              onPress={() => updateQuantity(item.id, -1)}
+              onPress={() => updateQuantity(item.id.toString(), -1)}
               style={[styles.quantityButton, { backgroundColor: colors.secondary }]}
             >
               <Text style={[styles.quantityText, { color: colors.text }]}>-</Text>
             </TouchableOpacity>
             <Text style={[styles.quantity, { color: colors.text }]}>{quantity}</Text>
             <TouchableOpacity
-              onPress={() => updateQuantity(item.id, 1)}
+              onPress={() => updateQuantity(item.id.toString(), 1)}
               style={[styles.quantityButton, { backgroundColor: colors.secondary }]}
             >
               <Text style={[styles.quantityText, { color: colors.text }]}>+</Text>
@@ -103,7 +139,7 @@ export default function MainCardMenu() {
           </View>
         ) : (
           <TouchableOpacity
-            onPress={() => addToCart(item.id)}
+            onPress={() => addToCart(item.id.toString())}
             style={[styles.addButton, { backgroundColor: colors.primary }]}
           >
             <Text style={[styles.addButtonText, { color: colors.card }]}>Tambah</Text>
@@ -113,12 +149,20 @@ export default function MainCardMenu() {
     );
   };
 
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container]}>
       <FlatList
         data={menuItems}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         numColumns={4}
         columnWrapperStyle={styles.row}
         contentContainerStyle={styles.list}
@@ -165,7 +209,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   addIcon: {
-    fontSize: 60, // Perbesar ukuran ikon
+    fontSize: 60, 
     fontWeight: "bold",
   },
   name: {
@@ -207,5 +251,9 @@ const styles = StyleSheet.create({
   quantity: {
     fontSize: 12,
     marginHorizontal: 8,
+  },
+  promoPrice: {
+    fontSize: 10,
+    marginBottom: 6,
   },
 });
