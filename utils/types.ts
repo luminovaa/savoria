@@ -1,9 +1,11 @@
-type User = {
+export type User = {
     id?: string;
     email?: string;
     created_at?: string;
     name?: string;
     password?: string;
+    last_sign_in_at?: string;
+    
 }
 
 export type Shop = {
@@ -14,3 +16,8 @@ export type Shop = {
     updated_at?: Date;
     phone?: string;
 }
+
+export type Role = {
+    id: string;
+    name: string;
+  };
