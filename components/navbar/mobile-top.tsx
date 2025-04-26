@@ -13,14 +13,11 @@ const Navbar = () => {
     mobileNavbar: {
       flexDirection: "row",
       alignItems: "center",
-      height: 60,
+      height: 80,
       borderBottomWidth: 1,
-      paddingHorizontal: 16,
-      backgroundColor: colors.background,
+      paddingTop: 20,
+      backgroundColor: colors.card,
       borderBottomColor: colors.border,
-    },
-    hamburgerIcon: {
-      padding: 8,
     },
     mobileLogoContainer: {
       alignItems: "center",

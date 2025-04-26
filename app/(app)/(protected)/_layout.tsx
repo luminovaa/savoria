@@ -16,15 +16,11 @@ export default function ProtectedLayout() {
       setIsMobile(windowWidth < breakpoint);
     };
 
-    // Initial check
     updateLayout();
     
-    // Set up the event listener
     const subscription = Dimensions.addEventListener("change", updateLayout);
 
-    // Clean up
     return () => {
-      // Modern way to remove listeners in React Native
       subscription.remove();
     };
   }, []);

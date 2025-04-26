@@ -9,6 +9,8 @@ import {
   SafeAreaView,
   TouchableOpacity,
   RefreshControl,
+  Modal,
+  Pressable,
 } from "react-native";
 import { supabase } from "@/utils/supabase";
 import { useTheme } from "@/hooks/use-theme";
@@ -24,6 +26,9 @@ export default function UsersListScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
+  const [selectedUser, setSelectedUser] = useState<UserList | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -34,20 +39,16 @@ export default function UsersListScreen() {
       setLoading(true);
       const { data: authData, error: authError } =
         await supabase.auth.admin.listUsers();
-      if (authError) {
-        throw authError;
-      }
+      if (authError) throw authError;
 
-      const { data: profilesData, error: profilesError } = (await supabase
+      const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
-        .select(`id, first_name, last_name, role_id, role (name)`)) as {
+        .select(`id, first_name, last_name, role_id, role (name)`) as {
         data: ProfileWithRole[];
         error: any;
       };
 
-      if (profilesError) {
-        throw profilesError;
-      }
+      if (profilesError) throw profilesError;
 
       const combinedUsers = authData.users.map((user) => {
         const profile = profilesData.find((p) => p.id === user.id);
@@ -66,45 +67,26 @@ export default function UsersListScreen() {
       Alert.alert("Error", "Gagal memuat daftar pengguna: ");
     } finally {
       setLoading(false);
-      setRefreshing(false); 
+      setRefreshing(false);
     }
   }
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchUsers(); 
+    fetchUsers();
   };
 
   const handleAddCashier = () => {
     router.push("/(app)/(protected)/cashier/add-user");
   };
 
-  const handleLongPress = (user: UserList) => {
-    Alert.alert(
-      `${user.first_name} ${user.last_name}`,
-      "Pilih aksi untuk pengguna ini",
-      [
-        {
-          text: "Edit",
-          onPress: () => {
-            router.push({
-              pathname: "/(app)/(protected)/cashier/edit-user",
-              params: { userId: user.id },
-            });
-          },
-        },
-        {
-          text: "Hapus",
-          style: "destructive",
-          onPress: () => confirmDeleteUser(user),
-        },
-        {
-          text: "Batal",
-          style: "cancel",
-        },
-      ],
-      { cancelable: true }
-    );
+  const handleLongPress = (
+    user: UserList,
+    event: { nativeEvent: { pageX: number; pageY: number } }
+  ) => {
+    setSelectedUser(user);
+    setModalPosition({ x: event.nativeEvent.pageX, y: event.nativeEvent.pageY });
+    setModalVisible(true);
   };
 
   const confirmDeleteUser = (user: UserList) => {
@@ -112,10 +94,7 @@ export default function UsersListScreen() {
       "Konfirmasi Hapus",
       `Apakah Anda yakin ingin menghapus pengguna ${user.first_name} ${user.last_name}?`,
       [
-        {
-          text: "Batal",
-          style: "cancel",
-        },
+        { text: "Batal", style: "cancel" },
         {
           text: "Hapus",
           style: "destructive",
@@ -129,20 +108,19 @@ export default function UsersListScreen() {
   const deleteUser = async (userId: string) => {
     try {
       const { error } = await supabase.auth.admin.deleteUser(userId);
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
       setUsers(users.filter((user) => user.id !== userId));
-      Alert.alert("Sukses", "Kasir berhasil dihapus");
+      Alert.alert("Sukses", "Pengguna berhasil dihapus");
     } catch (error: any) {
       Alert.alert("Error", "Gagal menghapus pengguna");
     }
+    setModalVisible(false);
   };
 
   const renderUserItem = ({ item }: { item: UserList }) => (
     <TouchableOpacity
       style={styles.userItem}
-      onLongPress={() => handleLongPress(item)}
+      onLongPress={(event) => handleLongPress(item, event)}
     >
       <View style={styles.userIcon}>
         <Feather name="user" size={20} color={colors.primary} />
@@ -255,6 +233,35 @@ export default function UsersListScreen() {
       fontWeight: "600",
       marginLeft: 8,
     },
+    modalContainer: {
+      position: "absolute",
+      width: 150,
+      backgroundColor: colors.card,
+      borderRadius: 8,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 5,
+    },
+    modalButton: {
+      padding: 12,
+      alignItems: "center",
+      borderBottomWidth: 1,
+      borderBottomColor: colors.textSecondary + "20",
+    },
+    modalButtonText: {
+      color: colors.text,
+      fontSize: 16,
+    },
+    modalButtonDestructive: {
+      padding: 12,
+      alignItems: "center",
+    },
+    modalButtonDestructiveText: {
+      color: colors.error,
+      fontSize: 16,
+    },
   });
 
   if (loading) {
@@ -285,7 +292,7 @@ export default function UsersListScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={[colors.primary]} 
+              colors={[colors.primary]}
               tintColor={colors.primary}
             />
           }
@@ -308,6 +315,53 @@ export default function UsersListScreen() {
           <Text style={styles.addButtonText}>Tambah Kasir</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        transparent={true}
+        visible={modalVisible}
+        animationType="none"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: "transparent" }}
+          onPress={() => setModalVisible(false)}
+        >
+          <View
+            style={[
+              styles.modalContainer,
+              {
+                top: modalPosition.y,
+                left: modalPosition.x - 150, // Adjust to align modal
+              },
+            ]}
+          >
+            <Pressable
+              style={styles.modalButton}
+              onPress={() => {
+                if (selectedUser) {
+                  router.push({
+                    pathname: "/(app)/(protected)/cashier/edit-user",
+                    params: { userId: selectedUser.id },
+                  });
+                  setModalVisible(false);
+                }
+              }}
+            >
+              <Text style={styles.modalButtonText}>Edit</Text>
+            </Pressable>
+            <Pressable
+              style={styles.modalButtonDestructive}
+              onPress={() => {
+                if (selectedUser) {
+                  confirmDeleteUser(selectedUser);
+                }
+              }}
+            >
+              <Text style={styles.modalButtonDestructiveText}>Hapus</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
