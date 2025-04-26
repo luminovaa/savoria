@@ -1,13 +1,32 @@
 // ProtectedLayout.tsx
-import React from "react";
-import { View, StyleSheet } from "react-native";
-import { useTheme } from "@/hooks/use-theme";
+import React, { useEffect, useState } from "react";
+import { View, StyleSheet, Dimensions } from "react-native";
 import { Slot } from "expo-router";
-import Navbar from "@/components/navbar";
+import TabletNavbar from "@/components/navbar/tablet";
+import MobileNavbar from "@/components/navbar/mobile";
 
 export default function ProtectedLayout() {
-  const { colors } = useTheme();
+  const [isMobile, setIsMobile] = useState(true);
 
+  useEffect(() => {
+    const updateLayout = () => {
+      const breakpoint = 768;
+      const windowWidth = Dimensions.get("window").width;
+      setIsMobile(windowWidth < breakpoint);
+    };
+
+    // Initial check
+    updateLayout();
+    
+    // Set up the event listener
+    const subscription = Dimensions.addEventListener("change", updateLayout);
+
+    // Clean up
+    return () => {
+      // Modern way to remove listeners in React Native
+      subscription.remove();
+    };
+  }, []);
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -19,10 +38,11 @@ export default function ProtectedLayout() {
 
   return (
     <View style={styles.container}>
-      <Navbar />
+      {!isMobile && <TabletNavbar />}
       <View style={styles.content}>
         <Slot />
       </View>
+      {isMobile && <MobileNavbar />}
     </View>
   );
 }
