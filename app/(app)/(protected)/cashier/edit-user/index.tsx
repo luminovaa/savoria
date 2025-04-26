@@ -19,7 +19,6 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { z } from "zod";
 import { Role } from "@/utils/types";
 
-// Define Zod schema for form validation
 const userFormSchema = z.object({
   email: z.string().email("Email tidak valid").min(1, "Email wajib diisi"),
   password: z.string().min(6, "Kata sandi minimal 6 karakter").max(100).optional().or(z.literal("")),
@@ -91,7 +90,6 @@ export default function EditUserScreen() {
         role_id: profileData.role_id || 0,
       });
 
-      // If user has a role, set it as selected role
       if (profileData.role_id) {
         const role = roles.find(r => r.id === profileData.role_id);
         if (role) {
@@ -126,7 +124,6 @@ export default function EditUserScreen() {
 
   const validateForm = (): boolean => {
     try {
-      // For password, we need to handle it differently since it's optional during edit
       const formToValidate = {
         ...form,
         password: form.password?.trim() === "" ? undefined : form.password,
@@ -157,7 +154,6 @@ export default function EditUserScreen() {
       
       setLoading(true);
 
-      // Update auth user (email and optionally password)
       const authUpdate: { email?: string; password?: string } = { email: form.email.trim() };
       if (form.password?.trim()) {
         authUpdate.password = form.password.trim();
@@ -169,7 +165,6 @@ export default function EditUserScreen() {
         throw authError;
       }
 
-      // Update profile
       const { error: profileError } = await supabase
         .from("profiles")
         .update({
@@ -195,7 +190,6 @@ export default function EditUserScreen() {
 
   const handleInputChange = (field: keyof UserFormData, value: string) => {
     setForm({ ...form, [field]: value });
-    // Clear error for this field if it exists
     if (formErrors[field]) {
       setFormErrors({ ...formErrors, [field]: "" });
     }
@@ -205,7 +199,6 @@ export default function EditUserScreen() {
     setSelectedRole(role);
     setForm({ ...form, role_id: role.id });
     setDropdownVisible(false);
-    // Clear error for role_id if it exists
     if (formErrors.role_id) {
       setFormErrors({ ...formErrors, role_id: "" });
     }
@@ -215,20 +208,6 @@ export default function EditUserScreen() {
     container: {
       flex: 1,
       backgroundColor: colors.background,
-    },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      padding: 16,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      backgroundColor: colors.card,
-    },
-    headerTitle: {
-      fontSize: 20,
-      fontWeight: "bold",
-      color: colors.text,
-      marginLeft: 16,
     },
     content: {
       padding: 16,
@@ -390,15 +369,6 @@ export default function EditUserScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Feather name="arrow-left" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit Pengguna</Text>
-        </View>
         <View style={styles.content}>
           {error && (
             <View style={styles.errorContainer}>
@@ -513,7 +483,6 @@ export default function EditUserScreen() {
         </View>
       </ScrollView>
 
-      {/* Custom Dropdown Modal */}
       <Modal
         visible={dropdownVisible}
         transparent={true}

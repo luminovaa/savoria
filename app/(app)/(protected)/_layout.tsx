@@ -4,6 +4,7 @@ import { View, StyleSheet, Dimensions } from "react-native";
 import { Slot } from "expo-router";
 import TabletNavbar from "@/components/navbar/tablet";
 import MobileNavbar from "@/components/navbar/mobile";
+import Navbar from "@/components/navbar/mobile-top";
 
 export default function ProtectedLayout() {
   const [isMobile, setIsMobile] = useState(true);
@@ -39,6 +40,7 @@ export default function ProtectedLayout() {
   return (
     <View style={styles.container}>
       {!isMobile && <TabletNavbar />}
+      {isMobile && <Navbar />}
       <View style={styles.content}>
         <Slot />
       </View>

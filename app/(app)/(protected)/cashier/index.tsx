@@ -15,6 +15,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { ProfileWithRole, UserList } from "@/utils/types";
+import { capitalizeText } from "@/utils/format";
 
 export default function UsersListScreen() {
   const { colors, theme } = useTheme();
@@ -62,7 +63,7 @@ export default function UsersListScreen() {
       setUsers(combinedUsers);
     } catch (error: any) {
       setError(error.message);
-      Alert.alert("Error", "Gagal memuat daftar pengguna: " + error.message);
+      Alert.alert("Error", "Gagal memuat daftar pengguna: ");
     } finally {
       setLoading(false);
       setRefreshing(false); 
@@ -132,9 +133,9 @@ export default function UsersListScreen() {
         throw error;
       }
       setUsers(users.filter((user) => user.id !== userId));
-      Alert.alert("Sukses", "Pengguna berhasil dihapus");
+      Alert.alert("Sukses", "Kasir berhasil dihapus");
     } catch (error: any) {
-      Alert.alert("Error", "Gagal menghapus pengguna: " + error.message);
+      Alert.alert("Error", "Gagal menghapus pengguna");
     }
   };
 
@@ -148,7 +149,7 @@ export default function UsersListScreen() {
       </View>
       <View style={styles.userInfo}>
         <Text style={[styles.userEmail, { color: colors.text }]}>
-          {item.first_name} {item.last_name}
+          {capitalizeText(item.first_name + " " + item.last_name)}
         </Text>
         <Text style={[styles.userMeta, { color: colors.textSecondary }]}>
           Email: {item.email}
