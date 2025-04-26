@@ -1,15 +1,14 @@
 import { Slot } from "expo-router";
-import {  View } from "react-native";
+import { Dimensions, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 
 import { SupabaseProvider, useSupabase } from "@/context/supabase-provider";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { ThemeProvider } from "@/components/themes/theme-context";
 import { useTheme } from "@/hooks/use-theme";
 
 function RootLayoutNav() {
   const { onLayoutRootView } = useSupabase();
-  
 
   return (
     <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
@@ -20,11 +19,28 @@ function RootLayoutNav() {
 
 export default function AppLayout() {
   const { theme } = useTheme();
-  
+  const [isMobile, setIsMobile] = useState(true);
+
+  useEffect(() => {
+    const updateLayout = () => {
+      const breakpoint = 768;
+      const windowWidth = Dimensions.get("window").width;
+      setIsMobile(windowWidth < breakpoint);
+    };
+
+    updateLayout();
+
+    const subscription = Dimensions.addEventListener("change", updateLayout);
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   return (
     <SupabaseProvider>
       <ThemeProvider>
-        <StatusBar style={theme === "dark" ? "light" : "dark"} hidden={true} />
+        <StatusBar style={theme === "dark" ? "light" : "dark"} hidden={isMobile ? false : true} />
         <RootLayoutNav />
       </ThemeProvider>
     </SupabaseProvider>

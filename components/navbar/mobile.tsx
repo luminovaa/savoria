@@ -53,7 +53,6 @@ const MobileNavbar = () => {
 
   return (
     <SafeAreaView edges={['bottom']} >
-
     <View style={styles.bottomTabs}>
       <TouchableOpacity
         style={[

@@ -10,10 +10,15 @@ import SettingItem from "./_component/setting-item";
 import SectionHeader from "./_component/section";
 import FooterSection from "./_component/footer";
 import { useRouter } from "expo-router";
+import { Linking } from "react-native";
 
 export default function SettingScreen() {
   // Explicitly type theme as Theme type
-  const { theme, toggleTheme, colors } = useTheme() as { theme: Theme; toggleTheme: () => void; colors: any };
+  const { theme, toggleTheme, colors } = useTheme() as {
+    theme: Theme;
+    toggleTheme: () => void;
+    colors: any;
+  };
   const { signOut, user } = useSupabase();
   const insets = useSafeAreaInsets();
   const styles = createStyles(colors, theme, insets);
@@ -28,7 +33,6 @@ export default function SettingScreen() {
 
   return (
     <View style={styles.container}>
-
       <ScrollView
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
@@ -40,8 +44,13 @@ export default function SettingScreen() {
         <ProfileSection userData={userData} colors={colors} styles={styles} />
 
         <View style={styles.section}>
-          <SectionHeader icon="sun" title="Tampilan" colors={colors} styles={styles} />
-          
+          <SectionHeader
+            icon="sun"
+            title="Tampilan"
+            colors={colors}
+            styles={styles}
+          />
+
           <SettingItem
             icon={theme === "dark" ? "moon" : "sun"}
             title={`Tema ${theme === "dark" ? "Gelap" : "Terang"}`}
@@ -52,7 +61,7 @@ export default function SettingScreen() {
             colors={colors}
             styles={styles}
           />
-          
+
           <SettingItem
             icon="globe"
             title="Bahasa"
@@ -65,15 +74,22 @@ export default function SettingScreen() {
             icon="package"
             title="Pengaturan Toko"
             description="Pengaturan Seputar Toko"
-            onPress={() => router.push("/(app)/(protected)/settings/shop-setting")}
+            onPress={() =>
+              router.push("/(app)/(protected)/settings/shop-setting")
+            }
             colors={colors}
             styles={styles}
           />
         </View>
 
         <View style={styles.section}>
-          <SectionHeader icon="info" title="Tentang Aplikasi" colors={colors} styles={styles} />
-          
+          <SectionHeader
+            icon="info"
+            title="Tentang Aplikasi"
+            colors={colors}
+            styles={styles}
+          />
+
           <SettingItem
             icon="info"
             title="Versi Aplikasi"
@@ -82,7 +98,7 @@ export default function SettingScreen() {
             colors={colors}
             styles={styles}
           />
-          
+
           <SettingItem
             icon="shield"
             title="Kebijakan Privasi"
@@ -90,7 +106,7 @@ export default function SettingScreen() {
             colors={colors}
             styles={styles}
           />
-          
+
           <SettingItem
             icon="file-text"
             title="Syarat dan Ketentuan"
@@ -98,11 +114,11 @@ export default function SettingScreen() {
             colors={colors}
             styles={styles}
           />
-          
+
           <SettingItem
             icon="help-circle"
             title="Bantuan & Dukungan"
-            onPress={() => {}}
+            onPress={() => Linking.openURL("https://wa.me/628385578764")}
             colors={colors}
             styles={styles}
           />

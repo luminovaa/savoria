@@ -19,7 +19,6 @@ import { useRouter } from "expo-router";
 import { Role } from "@/utils/types";
 import { z } from "zod";
 
-// Define Zod schema for form validation
 const userFormSchema = z.object({
   email: z.string().email("Email tidak valid").min(1, "Email wajib diisi"),
   password: z.string().min(6, "Kata sandi minimal 6 karakter").max(100),
@@ -52,7 +51,6 @@ export default function AddUserScreen() {
 
   useEffect(() => {
     fetchRoles();
-    // Focus on email input after a short delay
     setTimeout(() => {
       emailInputRef.current?.focus();
     }, 100);
@@ -104,7 +102,6 @@ export default function AddUserScreen() {
       }
 
       setLoading(true);
-      // Menggunakan admin API (jika Anda memiliki akses admin)
       const { data, error } = await supabase.auth.admin.createUser({
         email: form.email.trim(),
         password: form.password.trim(),
@@ -140,7 +137,6 @@ export default function AddUserScreen() {
 
   const handleInputChange = (field: keyof UserFormData, value: string) => {
     setForm({ ...form, [field]: value });
-    // Clear error for this field if it exists
     if (formErrors[field]) {
       setFormErrors({ ...formErrors, [field]: "" });
     }
@@ -150,7 +146,6 @@ export default function AddUserScreen() {
     setSelectedRole(role);
     setForm({ ...form, role_id: role.id });
     setDropdownVisible(false);
-    // Clear error for role_id if it exists
     if (formErrors.role_id) {
       setFormErrors({ ...formErrors, role_id: "" });
     }
@@ -478,7 +473,6 @@ export default function AddUserScreen() {
         </View>
       </ScrollView>
 
-      {/* Custom Dropdown Modal */}
       <Modal
         visible={dropdownVisible}
         transparent={true}
