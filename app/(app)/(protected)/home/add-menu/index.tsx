@@ -10,7 +10,8 @@ import {
   Alert,
   SafeAreaView,
   Image,
-  FlatList,
+  Platform,
+  Dimensions,
 } from "react-native";
 import { supabase } from "@/utils/supabase";
 import { useTheme } from "@/hooks/use-theme";
@@ -18,10 +19,10 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { z } from "zod";
 import * as ImagePicker from 'expo-image-picker';
-import { Platform } from 'react-native';
 import CategoryModal from "./_component/category-modal";
+import { formatCurrency, parseCurrency } from "@/utils/format";
+import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 
-// Schema validasi untuk form menu
 const menuFormSchema = z.object({
   name_menu: z.string().min(1, "Nama menu wajib diisi"),
   description: z.string().min(1, "Deskripsi wajib diisi"),
@@ -59,18 +60,27 @@ export default function AddMenuScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-
+  const [isTablet, setIsTablet] = useState(false);
+  
   useEffect(() => {
     initializeCategories();
-    (async () => {
-      if (Platform.OS !== 'web') {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Maaf, kami membutuhkan izin untuk mengakses galeri foto');
-        }
-      }
-    })();
+    checkIfTablet();
+    
+    // Add listener for orientation changes
+    const subscription = Dimensions.addEventListener('change', () => {
+      checkIfTablet();
+    });
+    
+    return () => {
+      subscription.remove();
+    };
   }, []);
+  
+  const checkIfTablet = () => {
+    const { width, height } = Dimensions.get('window');
+    const screenWidth = Math.min(width, height); 
+    setIsTablet(screenWidth >= 768);
+  };
 
   async function initializeCategories() {
     try {
@@ -181,43 +191,44 @@ export default function AddMenuScreen() {
 
       setLoading(true);
       let imageUrl = null;
-      
+
       if (image) {
         imageUrl = await uploadImage(image);
       }
 
-      const { error } = await supabase
-        .from('menu')
-        .insert({
-          name_menu: form.name_menu.trim(),
-          description: form.description.trim(),
-          price: form.price,
-          category_id: form.category_id,
-          images: imageUrl,
-          promo: form.promo,
-          promo_price: form.promo ? form.promo_price : null,
-          promo_start: form.promo ? form.promo_start : null,
-          promo_end: form.promo ? form.promo_end : null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
+      const { error } = await supabase.from("menu").insert({
+        name_menu: form.name_menu.trim(),
+        description: form.description.trim(),
+        price: form.price,
+        category_id: form.category_id,
+        images: imageUrl,
+        promo: form.promo,
+        promo_price: form.promo ? form.promo_price : null,
+        promo_start: form.promo ? form.promo_start : null,
+        promo_end: form.promo ? form.promo_end : null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
 
       if (error) {
-        console.error('Error menyimpan menu:', error);
+        console.error("Error menyimpan menu:", error);
         throw error;
       }
 
       Alert.alert("Sukses", "Menu berhasil ditambahkan");
       router.back();
     } catch (error: any) {
-      console.error('Error detail:', error);
+      console.error("Error detail:", error);
       Alert.alert("Error", "Gagal menambahkan menu: " + error.message);
     } finally {
       setLoading(false);
     }
   }
 
-  const handleInputChange = (field: keyof MenuFormData, value: string | number | boolean) => {
+  const handleInputChange = (
+    field: keyof MenuFormData,
+    value: string | number | boolean
+  ) => {
     setForm({ ...form, [field]: value });
     if (formErrors[field]) {
       setFormErrors({ ...formErrors, [field]: "" });
@@ -230,8 +241,149 @@ export default function AddMenuScreen() {
     setShowCategoryModal(false);
   };
 
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      padding: 20,
+      alignItems: isTablet ? 'center' : 'stretch',
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 20,
+      width: isTablet ? wp('70%') : wp('100%') - 40,
+      alignSelf: isTablet ? 'center' : 'flex-start',
+    },
+    backButton: {
+      marginRight: 20,
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: colors.text,
+    },
+    formContainer: {
+      width: isTablet ? wp('70%') : wp('100%') - 40,
+      alignSelf: 'center',
+    },
+    fieldContainer: {
+      marginBottom: 20,
+    },
+    fieldIcon: {
+      marginRight: 10,
+    },
+    label: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.text,
+    },
+    input: {
+      borderWidth: 1,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      color: colors.text,
+      borderColor: colors.border,
+    },
+    textArea: {
+      height: 100,
+      textAlignVertical: "top",
+    },
+    inputError: {
+      borderColor: "red",
+    },
+    errorText: {
+      color: "red",
+      fontSize: 12,
+      marginTop: 4,
+    },
+    saveButton: {
+      padding: 15,
+      borderRadius: 8,
+      alignItems: "center",
+      marginTop: 20,
+      backgroundColor: colors.primary,
+    },
+    saveButtonText: {
+      color: "#ffffff",
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    imageUploadContainer: {
+      width: "100%",
+      height: isTablet ? hp('30%') : 200,
+      marginBottom: 20,
+      borderRadius: 8,
+      overflow: "hidden",
+    },
+    imagePreview: {
+      width: "100%",
+      height: "100%",
+      resizeMode: "cover",
+    },
+    imagePlaceholder: {
+      width: "100%",
+      height: "100%",
+      backgroundColor: "#f0f0f0",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    imagePlaceholderText: {
+      marginTop: 10,
+      fontSize: 14,
+      color: colors.textSecondary,
+    },
+    categoryButton: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    switchContainer: {
+      marginLeft: "auto",
+    },
+    switch: {
+      width: 50,
+      height: 24,
+      borderRadius: 12,
+      justifyContent: "center",
+      padding: 2,
+      backgroundColor: colors.border,
+    },
+    switchActive: {
+      backgroundColor: colors.primary,
+    },
+    switchThumb: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: "#fff",
+      marginLeft: form.promo ? 24 : 0, // Animate the thumb position
+    },
+    promoField: {
+      marginTop: 10,
+    },
+    promoLabel: {
+      fontSize: 14,
+      marginBottom: 5,
+      color: colors.text,
+    },
+    categoryText: {
+      color: colors.text,
+    },
+    categoryPlaceholder: {
+      color: colors.textSecondary,
+    },
+    chevronIcon: {
+      color: colors.textSecondary,
+    },
+  });
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <TouchableOpacity
@@ -240,11 +392,10 @@ export default function AddMenuScreen() {
           >
             <Feather name="arrow-left" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={[styles.title, { color: colors.text }]}>Tambah Menu</Text>
+          <Text style={styles.title}>Tambah Menu</Text>
         </View>
 
         <View style={styles.formContainer}>
-          {/* Upload Image */}
           <TouchableOpacity
             style={styles.imageUploadContainer}
             onPress={pickImage}
@@ -254,14 +405,13 @@ export default function AddMenuScreen() {
             ) : (
               <View style={styles.imagePlaceholder}>
                 <Feather name="image" size={40} color={colors.primary} />
-                <Text style={[styles.imagePlaceholderText, { color: colors.textSecondary }]}>
+                <Text style={styles.imagePlaceholderText}>
                   Tap untuk memilih gambar
                 </Text>
               </View>
             )}
           </TouchableOpacity>
 
-          {/* Name Menu */}
           <View style={styles.fieldContainer}>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <View style={styles.fieldIcon}>
@@ -270,11 +420,7 @@ export default function AddMenuScreen() {
               <Text style={styles.label}>Nama Menu</Text>
             </View>
             <TextInput
-              style={[
-                styles.input,
-                formErrors.name_menu ? styles.inputError : null,
-                { color: colors.text, borderColor: colors.border },
-              ]}
+              style={[styles.input, formErrors.name_menu && styles.inputError]}
               value={form.name_menu}
               onChangeText={(value) => handleInputChange("name_menu", value)}
               placeholder="Masukkan nama menu"
@@ -285,7 +431,6 @@ export default function AddMenuScreen() {
             )}
           </View>
 
-          {/* Description */}
           <View style={styles.fieldContainer}>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <View style={styles.fieldIcon}>
@@ -297,8 +442,7 @@ export default function AddMenuScreen() {
               style={[
                 styles.input,
                 styles.textArea,
-                formErrors.description ? styles.inputError : null,
-                { color: colors.text, borderColor: colors.border },
+                formErrors.description && styles.inputError,
               ]}
               value={form.description}
               onChangeText={(value) => handleInputChange("description", value)}
@@ -312,7 +456,6 @@ export default function AddMenuScreen() {
             )}
           </View>
 
-          {/* Price */}
           <View style={styles.fieldContainer}>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <View style={styles.fieldIcon}>
@@ -321,13 +464,11 @@ export default function AddMenuScreen() {
               <Text style={styles.label}>Harga</Text>
             </View>
             <TextInput
-              style={[
-                styles.input,
-                formErrors.price ? styles.inputError : null,
-                { color: colors.text, borderColor: colors.border },
-              ]}
-              value={form.price.toString()}
-              onChangeText={(value) => handleInputChange("price", parseFloat(value) || 0)}
+              style={[styles.input, formErrors.price && styles.inputError]}
+              value={formatCurrency(form.price)}
+              onChangeText={(value) =>
+                handleInputChange("price", parseCurrency(value))
+              }
               placeholder="Masukkan harga"
               placeholderTextColor={colors.textSecondary}
               keyboardType="numeric"
@@ -337,7 +478,6 @@ export default function AddMenuScreen() {
             )}
           </View>
 
-          {/* Category */}
           <View style={styles.fieldContainer}>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <View style={styles.fieldIcon}>
@@ -349,24 +489,40 @@ export default function AddMenuScreen() {
               style={[
                 styles.input,
                 styles.categoryButton,
-                formErrors.category_id ? styles.inputError : null,
-                { borderColor: colors.border },
+                formErrors.category_id && styles.inputError,
               ]}
               onPress={() => setShowCategoryModal(true)}
             >
-              <Text style={{ color: selectedCategory ? colors.text : colors.textSecondary }}>
-                {selectedCategory ? selectedCategory.name_category : "Pilih kategori"}
+              <Text
+                style={
+                  selectedCategory
+                    ? styles.categoryText
+                    : styles.categoryPlaceholder
+                }
+              >
+                {selectedCategory
+                  ? selectedCategory.name_category
+                  : "Pilih kategori"}
               </Text>
-              <Feather name="chevron-down" size={20} color={colors.textSecondary} />
+              <Feather
+                name="chevron-down"
+                size={20}
+                style={styles.chevronIcon}
+              />
             </TouchableOpacity>
             {formErrors.category_id && (
               <Text style={styles.errorText}>{formErrors.category_id}</Text>
             )}
           </View>
 
-          {/* Promo Section */}
           <View style={styles.fieldContainer}>
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginBottom: 10,
+              }}
+            >
               <View style={styles.fieldIcon}>
                 <Feather name="percent" size={18} color={colors.primary} />
               </View>
@@ -376,12 +532,9 @@ export default function AddMenuScreen() {
                 onPress={() => handleInputChange("promo", !form.promo)}
               >
                 <View
-                  style={[
-                    styles.switch,
-                    { backgroundColor: form.promo ? colors.primary : colors.border },
-                  ]}
+                  style={[styles.switch, form.promo && styles.switchActive]}
                 >
-                  <View style={styles.switchThumb} />
+                  <View style={[styles.switchThumb]} />
                 </View>
               </TouchableOpacity>
             </View>
@@ -391,12 +544,15 @@ export default function AddMenuScreen() {
                 <View style={styles.promoField}>
                   <Text style={styles.promoLabel}>Harga Promo</Text>
                   <TextInput
-                    style={[
-                      styles.input,
-                      { color: colors.text, borderColor: colors.border },
-                    ]}
-                    value={form.promo_price?.toString()}
-                    onChangeText={(value) => handleInputChange("promo_price", parseFloat(value) || 0)}
+                    style={styles.input}
+                    value={
+                      form.promo_price !== undefined
+                        ? formatCurrency(form.promo_price)
+                        : ""
+                    } 
+                    onChangeText={(value) =>
+                      handleInputChange("promo_price", parseCurrency(value))
+                    }
                     placeholder="Masukkan harga promo"
                     placeholderTextColor={colors.textSecondary}
                     keyboardType="numeric"
@@ -406,12 +562,11 @@ export default function AddMenuScreen() {
                 <View style={styles.promoField}>
                   <Text style={styles.promoLabel}>Mulai Promo</Text>
                   <TextInput
-                    style={[
-                      styles.input,
-                      { color: colors.text, borderColor: colors.border },
-                    ]}
+                    style={styles.input}
                     value={form.promo_start}
-                    onChangeText={(value) => handleInputChange("promo_start", value)}
+                    onChangeText={(value) =>
+                      handleInputChange("promo_start", value)
+                    }
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor={colors.textSecondary}
                   />
@@ -420,12 +575,11 @@ export default function AddMenuScreen() {
                 <View style={styles.promoField}>
                   <Text style={styles.promoLabel}>Akhir Promo</Text>
                   <TextInput
-                    style={[
-                      styles.input,
-                      { color: colors.text, borderColor: colors.border },
-                    ]}
+                    style={styles.input}
                     value={form.promo_end}
-                    onChangeText={(value) => handleInputChange("promo_end", value)}
+                    onChangeText={(value) =>
+                      handleInputChange("promo_end", value)
+                    }
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor={colors.textSecondary}
                   />
@@ -435,7 +589,7 @@ export default function AddMenuScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.saveButton, { backgroundColor: colors.primary }]}
+            style={styles.saveButton}
             onPress={handleAddMenu}
             disabled={loading}
           >
@@ -448,7 +602,6 @@ export default function AddMenuScreen() {
         </View>
       </ScrollView>
 
-      {/* Use the new CategoryModal component */}
       <CategoryModal
         visible={showCategoryModal}
         onClose={() => setShowCategoryModal(false)}
@@ -463,119 +616,3 @@ export default function AddMenuScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 20,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  backButton: {
-    marginRight: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-  },
-  formContainer: {
-    flex: 1,
-  },
-  fieldContainer: {
-    marginBottom: 20,
-  },
-  fieldIcon: {
-    marginRight: 10,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  inputError: {
-    borderColor: "red",
-  },
-  errorText: {
-    color: "red",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  saveButton: {
-    padding: 15,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 20,
-  },
-  saveButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  imageUploadContainer: {
-    width: '100%',
-    height: 200,
-    marginBottom: 20,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  imagePreview: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  imagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imagePlaceholderText: {
-    marginTop: 10,
-    fontSize: 14,
-  },
-  categoryButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  switchContainer: {
-    marginLeft: 'auto',
-  },
-  switch: {
-    width: 50,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    padding: 2,
-  },
-  switchThumb: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-  },
-  promoField: {
-    marginTop: 10,
-  },
-  promoLabel: {
-    fontSize: 14,
-    marginBottom: 5,
-  },
-});

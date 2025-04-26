@@ -3,11 +3,13 @@ import { View, StyleSheet, Text, ScrollView, Dimensions } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import MainCardMenu from "./_component/menu-card";
 import TypeCard from "./_component/type-card";
+import InvoiceCart from "./_component/invoice-card";
 
 export default function HomeScreen() {
   const { colors } = useTheme();
   const screenWidth = Dimensions.get('window').width;
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [cart, setCart] = useState<{ [id: string]: number }>({});
 
   const styles = StyleSheet.create({
     container: {
@@ -33,10 +35,9 @@ export default function HomeScreen() {
     },
     contentArea: {
       flex: 1,
-      // padding: 20,
     },
     rightSidebar: {
-      width: screenWidth * 0.22,
+      width: screenWidth * 0.26,
       paddingRight: 20,
       height: '98%',
     },
@@ -55,10 +56,11 @@ export default function HomeScreen() {
       paddingBottom: 30,
     },
   });
+
   const handleCategorySelect = (categoryId: number | null) => {
     setSelectedCategory(selectedCategory === categoryId ? null : categoryId);
   };
-  
+
   return (
     <View style={styles.container}>
       <View style={styles.layout}>
@@ -74,14 +76,18 @@ export default function HomeScreen() {
         <View style={styles.contentArea}>
           <ScrollView contentContainerStyle={styles.contentContainer}>
             <View style={styles.cardMenuContainer}>
-              <MainCardMenu selectedCategory={selectedCategory} />
+              <MainCardMenu 
+                selectedCategory={selectedCategory} 
+                cart={cart}
+                setCart={setCart}
+              />
             </View>
           </ScrollView>
         </View>
         
         <View style={styles.rightSidebar}>
           <View style={styles.cardInvoiceContainer}>
-            <Text style={{color: colors.text}}>Invoice</Text>
+            <InvoiceCart cart={cart} setCart={setCart} />
           </View>
         </View>
       </View>

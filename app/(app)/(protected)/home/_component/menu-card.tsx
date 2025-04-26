@@ -1,19 +1,34 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, Image, TouchableOpacity, FlatList, StyleSheet, Dimensions, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+  Dimensions,
+  ActivityIndicator,
+} from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { useRouter } from "expo-router";
 import { supabase } from "@/utils/supabase";
 import { MenuItem } from "@/utils/types";
 import { formatCurrency } from "@/utils/format";
+import { Feather } from "@expo/vector-icons";
 
-const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
 type MainCardMenuProps = {
   selectedCategory: number | null;
+  cart: { [id: string]: number };
+  setCart: React.Dispatch<React.SetStateAction<{ [id: string]: number }>>;
 };
 
-export default function MainCardMenu({ selectedCategory }: MainCardMenuProps) {
-  const [cart, setCart] = useState<{ [id: string]: number }>({});
+export default function MainCardMenu({
+  selectedCategory,
+  cart,
+  setCart,
+}: MainCardMenuProps) {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const { colors } = useTheme();
@@ -22,18 +37,18 @@ export default function MainCardMenu({ selectedCategory }: MainCardMenuProps) {
   const fetchMenuItems = async () => {
     try {
       setLoading(true);
-      let query = supabase.from('menu').select('*');
-      
+      let query = supabase.from("menu").select("*");
+
       if (selectedCategory) {
-        query = query.eq('category_id', selectedCategory);
+        query = query.eq("category_id", selectedCategory);
       } else {
-        query = query.order('created_at', { ascending: false });
+        query = query.order("created_at", { ascending: false });
       }
-  
+
       const { data, error } = await query;
-  
+
       if (error) throw error;
-  
+
       const items = data || [];
       setMenuItems([
         ...items,
@@ -50,157 +65,41 @@ export default function MainCardMenu({ selectedCategory }: MainCardMenuProps) {
           promo_end: null,
           created_at: "",
           updated_at: "",
-          isAddButton: true
-        }
+          isAddButton: true,
+        },
       ]);
     } catch (error) {
-      console.error('Error fetching menu items:', error);
+      console.error("Error fetching menu items:", error);
     } finally {
       setLoading(false);
     }
   };
-  
+
   useEffect(() => {
     fetchMenuItems();
-  }, [selectedCategory]); 
+  }, [selectedCategory]);
 
-
-  const addToCart = (id: string) => {
-    const newQuantity = (cart[id] || 0) + 1;
-    setCart({ ...cart, [id]: newQuantity });
-    addToOrder(id, newQuantity); 
-  };
-  
-  const updateQuarterQuantity = (id: string, delta: number) => {
+  const updateQuantity = (id: string, delta: number) => {
     setCart((prevCart) => {
       const newQuantity = (prevCart[id] || 0) + delta;
       if (newQuantity <= 0) {
         const { [id]: _, ...rest } = prevCart;
         return rest;
       }
-      addToOrder(id, newQuantity); 
       return { ...prevCart, [id]: newQuantity };
     });
   };
 
-  // const updateQuarterQuantity = (id: string, delta: number) => {
-  //   setCart((prevCart) => {
-  //     const newQuantity = (prevCart[id] || 0) + delta;
-  //     if (newQuantity <= 0) {
-  //       const { [id]: _, ...rest } = prevCart;
-  //       return rest;
-  //     }
-  //     return { ...prevCart, [id]: newQuantity };
-  //   });
-  // };
-
-  // const addToCart = (id: string) => {
-  //   setCart((prevCart) => ({
-  //     ...prevCart,
-  //     [id]: (prevCart[id] || 0) + 1,
-  //   }));
-  // };
+  const addToCart = (id: string) => {
+    setCart((prevCart) => ({
+      ...prevCart,
+      [id]: (prevCart[id] || 0) + 1,
+    }));
+  };
 
   const handleAddMenu = () => {
     router.push("/(app)/(protected)/home/add-menu");
   };
-
-
-
-const addToOrder = async (menuId: string, quantity: number) => {
-  try {
- 
-    let { data: activeOrder, error: orderError } = await supabase
-      .from('orders')
-      .select('id')
-      .eq('status', 'draft')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    let orderId;
-    if (!activeOrder) {
-      
-      const invoiceNumber = `INV-${Date.now()}`; 
-      const { data: newOrder, error: newOrderError } = await supabase
-        .from('orders')
-        .insert([{
-          invoice_number: invoiceNumber,
-          status: 'draft',
-          payment_type: null,
-          total_amount: 0,
-          total: 0
-        }])
-        .select()
-        .single();
-      if (newOrderError) throw newOrderError;
-      orderId = newOrder.id;
-    } else {
-      orderId = activeOrder.id;
-    }
-
-    
-    const { data: existingItem } = await supabase
-      .from('order_items')
-      .select('id, quantity, price')
-      .eq('orders_id', orderId)
-      .eq('menu_id', menuId)
-      .maybeSingle();
-
-    
-    const { data: menu, error: menuError } = await supabase
-      .from('menu')
-      .select('price, promo_price, promo')
-      .eq('id', menuId)
-      .single();
-    if (menuError) throw menuError;
-    const price = menu.promo ? menu.promo_price : menu.price;
-
-    if (existingItem) {
-      
-      const newQuantity = existingItem.quantity + quantity;
-      const newSubtotal = price * newQuantity;
-      await supabase
-        .from('order_items')
-        .update({
-          quantity: newQuantity,
-          subtotal: newSubtotal
-        })
-        .eq('id', existingItem.id);
-    } else {
-     
-      await supabase
-        .from('order_items')
-        .insert([{
-          orders_id: orderId,
-          menu_id: menuId,
-          price: price,
-          quantity: quantity,
-          subtotal: price * quantity
-        }]);
-    }
-
-    // await supabase
-    //   .from('orders')
-    //   .update({ status: 'paid' })
-    //   .eq('id', orderId);
-
-    alert('Item berhasil ditambahkan ke pesanan!');
-  } catch (error) {
-    console.error('Error adding to order:', error);
-    alert('Gagal menambahkan item ke pesanan');
-  }
-};
-
-
-
-
-
-
-
-
-
-
 
   const styles = StyleSheet.create({
     container: {
@@ -208,8 +107,10 @@ const addToOrder = async (menuId: string, quantity: number) => {
       backgroundColor: colors.background,
     },
     loadingContainer: {
-      justifyContent: 'center',
-      alignItems: 'center',
+      justifyContent: "center",
+      alignItems: "center",
+      flex: 1,
+      minHeight: SCREEN_HEIGHT * 0.7,
     },
     list: {
       paddingHorizontal: 15,
@@ -221,9 +122,8 @@ const addToOrder = async (menuId: string, quantity: number) => {
     },
     card: {
       borderRadius: 12,
-      padding: 10,
       width: "23.8%",
-      alignItems: "center",
+      overflow: "hidden",
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.card,
@@ -232,48 +132,96 @@ const addToOrder = async (menuId: string, quantity: number) => {
       shadowOpacity: 0.15,
       shadowRadius: 8,
       elevation: 2,
-      height: 250,
-      justifyContent: "space-between",
+      height: 280,
+    },
+    imageContainer: {
+      width: "100%",
+      height: 160,
+      borderTopLeftRadius: 12,
+      borderTopRightRadius: 12,
+      overflow: "hidden",
     },
     image: {
-      width: 70,
-      height: 120,
-      borderRadius: 10,
-      marginBottom: 6,
+      width: "100%",
+      height: "100%",
     },
-    addIconContainer: {
+    contentContainer: {
+      padding: 10,
       flex: 1,
+      justifyContent: "space-between",
+    },
+    addButtonCard: {
+      borderRadius: 12,
+      width: "23.8%",
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderStyle: "dashed",
+      backgroundColor: colors.card,
+      height: 280,
       justifyContent: "center",
       alignItems: "center",
     },
+    addIconContainer: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 15,
+    },
     addIcon: {
-      fontSize: 60,
-      fontWeight: "bold",
       color: colors.primary,
     },
-    name: {
-      fontSize: 12,
+    addText: {
+      fontSize: 14,
       fontWeight: "600",
-      textAlign: "center",
-      marginBottom: 4,
-      flexWrap: "wrap",
       color: colors.text,
     },
+    name: {
+      fontSize: 14,
+      fontWeight: "600",
+      marginBottom: 4,
+      color: colors.text,
+    },
+    priceContainer: {
+      marginBottom: 8,
+    },
     price: {
-      fontSize: 11,
-      marginBottom: 6,
+      fontSize: 13,
       color: colors.textSecondary,
     },
+    originalPrice: {
+      fontSize: 12,
+      textDecorationLine: "line-through",
+      color: colors.textSecondary,
+      marginBottom: 2,
+    },
     promoPrice: {
-      fontSize: 10,
-      marginBottom: 6,
+      fontSize: 13,
+      fontWeight: "600",
       color: colors.primary,
     },
+    labelPromo: {
+      position: "absolute",
+      top: 10,
+      right: 10,
+      backgroundColor: colors.primary,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 20,
+      zIndex: 1,
+    },
+    labelPromoText: {
+      color: colors.card,
+      fontSize: 10,
+      fontWeight: "bold",
+    },
     addButton: {
-      paddingVertical: 6,
+      paddingVertical: 8,
       paddingHorizontal: 12,
       borderRadius: 8,
       backgroundColor: colors.primary,
+      alignItems: "center",
     },
     addButtonText: {
       fontWeight: "600",
@@ -284,81 +232,113 @@ const addToOrder = async (menuId: string, quantity: number) => {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      width: 70,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
     },
     quantityButton: {
       padding: 4,
-      borderRadius: 6,
-      width: 24,
-      alignItems: "center",
-      backgroundColor: colors.secondary,
     },
-    quantityText: {
-      fontSize: 14,
+    quantity: {
+      fontSize: 13,
       fontWeight: "600",
       color: colors.text,
     },
-    quantity: {
-      fontSize: 12,
-      marginHorizontal: 8,
-      color: colors.text,
-    },
   });
-  
+
   const renderItem = ({ item }: { item: MenuItem }) => {
     if (item.id === 0) {
       return (
-        <TouchableOpacity
-          style={styles.card}
-          onPress={handleAddMenu}
-        >
+        <TouchableOpacity style={styles.addButtonCard} onPress={handleAddMenu}>
           <View style={styles.addIconContainer}>
-            <Text style={styles.addIcon}>+</Text>
+            <Feather
+              name="plus"
+              width={30}
+              height={30}
+              style={styles.addIcon}
+            />
           </View>
-          <Text style={styles.name}>Tambah Menu</Text>
+          <Text style={styles.addText}>Tambah Menu</Text>
         </TouchableOpacity>
       );
     }
 
     const quantity = cart[item.id.toString()] || 0;
+    const hasPromo = item.promo && item.promo_price !== null;
+
     return (
       <View style={styles.card}>
-        <Image source={{ uri: item.images }} style={styles.image} />
-        <Text style={styles.name} numberOfLines={2}>
-          {item.name_menu}
-        </Text>
-        <Text style={styles.price}>
-          {formatCurrency(item.price)}
-        </Text>
-        {item.promo && (
-          <Text style={styles.promoPrice}>
-            {formatCurrency(item.promo_price!)}
-          </Text>
-        )}
-        {quantity > 0 ? (
-          <View style={styles.quantityContainer}>
-            <TouchableOpacity
-              onPress={() => updateQuarterQuantity(item.id.toString(), -1)}
-              style={styles.quantityButton}
-            >
-              <Text style={styles.quantityText}>-</Text>
-            </TouchableOpacity>
-            <Text style={styles.quantity}>{quantity}</Text>
-            <TouchableOpacity
-              onPress={() => updateQuarterQuantity(item.id.toString(), 1)}
-              style={styles.quantityButton}
-            >
-              <Text style={styles.quantityText}>+</Text>
-            </TouchableOpacity>
+        {hasPromo && (
+          <View style={styles.labelPromo}>
+            <Text style={styles.labelPromoText}>PROMO</Text>
           </View>
-        ) : (
-          <TouchableOpacity
-            onPress={() => addToCart(item.id.toString())}
-            style={styles.addButton}
-          >
-            <Text style={styles.addButtonText}>Tambah</Text>
-          </TouchableOpacity>
         )}
+
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: item.images }}
+            style={styles.image}
+            resizeMode="cover"
+          />
+        </View>
+
+        <View style={styles.contentContainer}>
+          <Text style={styles.name} numberOfLines={2}>
+            {item.name_menu}
+          </Text>
+
+          <View style={styles.priceContainer}>
+            {hasPromo ? (
+              <>
+                <Text style={styles.originalPrice}>
+                  {formatCurrency(item.price)}
+                </Text>
+                <Text style={styles.promoPrice}>
+                  {formatCurrency(item.promo_price!)}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.price}>{formatCurrency(item.price)}</Text>
+            )}
+          </View>
+
+          {quantity > 0 ? (
+            <View style={styles.quantityContainer}>
+              <TouchableOpacity
+                onPress={() => updateQuantity(item.id.toString(), -1)}
+                style={styles.quantityButton}
+              >
+                <Feather
+                  name="minus"
+                  width={18}
+                  height={18}
+                  color={colors.primary}
+                />
+              </TouchableOpacity>
+              <Text style={styles.quantity}>{quantity}</Text>
+              <TouchableOpacity
+                onPress={() => updateQuantity(item.id.toString(), 1)}
+                style={styles.quantityButton}
+              >
+                <Feather
+                  name="plus"
+                  width={18}
+                  height={18}
+                  color={colors.primary}
+                />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => addToCart(item.id.toString())}
+              style={styles.addButton}
+            >
+              <Text style={styles.addButtonText}>Tambah</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   };
@@ -371,7 +351,6 @@ const addToOrder = async (menuId: string, quantity: number) => {
     );
   }
 
-
   return (
     <View style={styles.container}>
       <FlatList
@@ -382,6 +361,7 @@ const addToOrder = async (menuId: string, quantity: number) => {
         columnWrapperStyle={styles.row}
         contentContainerStyle={styles.list}
         scrollEnabled={false}
+        extraData={cart} // Tambahkan ini
       />
     </View>
   );
