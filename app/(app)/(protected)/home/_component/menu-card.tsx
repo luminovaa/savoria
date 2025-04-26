@@ -64,6 +64,13 @@ export default function MainCardMenu({ selectedCategory }: MainCardMenuProps) {
     fetchMenuItems();
   }, [selectedCategory]); 
 
+
+  const addToCart = (id: string) => {
+    const newQuantity = (cart[id] || 0) + 1;
+    setCart({ ...cart, [id]: newQuantity });
+    addToOrder(id, newQuantity); 
+  };
+  
   const updateQuarterQuantity = (id: string, delta: number) => {
     setCart((prevCart) => {
       const newQuantity = (prevCart[id] || 0) + delta;
@@ -71,20 +78,129 @@ export default function MainCardMenu({ selectedCategory }: MainCardMenuProps) {
         const { [id]: _, ...rest } = prevCart;
         return rest;
       }
+      addToOrder(id, newQuantity); 
       return { ...prevCart, [id]: newQuantity };
     });
   };
 
-  const addToCart = (id: string) => {
-    setCart((prevCart) => ({
-      ...prevCart,
-      [id]: (prevCart[id] || 0) + 1,
-    }));
-  };
+  // const updateQuarterQuantity = (id: string, delta: number) => {
+  //   setCart((prevCart) => {
+  //     const newQuantity = (prevCart[id] || 0) + delta;
+  //     if (newQuantity <= 0) {
+  //       const { [id]: _, ...rest } = prevCart;
+  //       return rest;
+  //     }
+  //     return { ...prevCart, [id]: newQuantity };
+  //   });
+  // };
+
+  // const addToCart = (id: string) => {
+  //   setCart((prevCart) => ({
+  //     ...prevCart,
+  //     [id]: (prevCart[id] || 0) + 1,
+  //   }));
+  // };
 
   const handleAddMenu = () => {
     router.push("/(app)/(protected)/home/add-menu");
   };
+
+
+
+const addToOrder = async (menuId: string, quantity: number) => {
+  try {
+ 
+    let { data: activeOrder, error: orderError } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('status', 'draft')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let orderId;
+    if (!activeOrder) {
+      
+      const invoiceNumber = `INV-${Date.now()}`; 
+      const { data: newOrder, error: newOrderError } = await supabase
+        .from('orders')
+        .insert([{
+          invoice_number: invoiceNumber,
+          status: 'draft',
+          payment_type: null,
+          total_amount: 0,
+          total: 0
+        }])
+        .select()
+        .single();
+      if (newOrderError) throw newOrderError;
+      orderId = newOrder.id;
+    } else {
+      orderId = activeOrder.id;
+    }
+
+    
+    const { data: existingItem } = await supabase
+      .from('order_items')
+      .select('id, quantity, price')
+      .eq('orders_id', orderId)
+      .eq('menu_id', menuId)
+      .maybeSingle();
+
+    
+    const { data: menu, error: menuError } = await supabase
+      .from('menu')
+      .select('price, promo_price, promo')
+      .eq('id', menuId)
+      .single();
+    if (menuError) throw menuError;
+    const price = menu.promo ? menu.promo_price : menu.price;
+
+    if (existingItem) {
+      
+      const newQuantity = existingItem.quantity + quantity;
+      const newSubtotal = price * newQuantity;
+      await supabase
+        .from('order_items')
+        .update({
+          quantity: newQuantity,
+          subtotal: newSubtotal
+        })
+        .eq('id', existingItem.id);
+    } else {
+     
+      await supabase
+        .from('order_items')
+        .insert([{
+          orders_id: orderId,
+          menu_id: menuId,
+          price: price,
+          quantity: quantity,
+          subtotal: price * quantity
+        }]);
+    }
+
+    // await supabase
+    //   .from('orders')
+    //   .update({ status: 'paid' })
+    //   .eq('id', orderId);
+
+    alert('Item berhasil ditambahkan ke pesanan!');
+  } catch (error) {
+    console.error('Error adding to order:', error);
+    alert('Gagal menambahkan item ke pesanan');
+  }
+};
+
+
+
+
+
+
+
+
+
+
 
   const styles = StyleSheet.create({
     container: {
