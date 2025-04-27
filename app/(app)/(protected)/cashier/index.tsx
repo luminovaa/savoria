@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,15 +9,14 @@ import {
   SafeAreaView,
   TouchableOpacity,
   RefreshControl,
-  Modal,
-  Pressable,
-} from "react-native";
-import { supabase } from "@/utils/supabase";
-import { useTheme } from "@/hooks/use-theme";
-import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { ProfileWithRole, UserList } from "@/utils/types";
-import { capitalizeText } from "@/utils/format";
+} from 'react-native';
+import { supabase } from '@/utils/supabase';
+import { useTheme } from '@/hooks/use-theme';
+import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { ProfileWithRole, UserList } from '@/utils/types';
+import { capitalizeText } from '@/utils/format';
+import { UserActionModal } from './_components/modal-user';
 
 export default function UsersListScreen() {
   const { colors, theme } = useTheme();
@@ -37,12 +36,11 @@ export default function UsersListScreen() {
   async function fetchUsers() {
     try {
       setLoading(true);
-      const { data: authData, error: authError } =
-        await supabase.auth.admin.listUsers();
+      const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
       if (authError) throw authError;
 
       const { data: profilesData, error: profilesError } = await supabase
-        .from("profiles")
+        .from('profiles')
         .select(`id, first_name, last_name, role_id, role (name)`) as {
         data: ProfileWithRole[];
         error: any;
@@ -54,17 +52,17 @@ export default function UsersListScreen() {
         const profile = profilesData.find((p) => p.id === user.id);
         return {
           id: user.id,
-          email: user.email || "",
+          email: user.email || '',
           last_sign_in_at: user.last_sign_in_at,
-          first_name: profile?.first_name || "-",
-          last_name: profile?.last_name || "-",
-          role_name: profile?.role?.name || "-",
+          first_name: profile?.first_name || '-',
+          last_name: profile?.last_name || '-',
+          role_name: profile?.role?.name || '-',
         };
       });
       setUsers(combinedUsers);
     } catch (error: any) {
       setError(error.message);
-      Alert.alert("Error", "Gagal memuat daftar pengguna: ");
+      Alert.alert('Error', 'Gagal memuat daftar kasir');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -77,7 +75,7 @@ export default function UsersListScreen() {
   };
 
   const handleAddCashier = () => {
-    router.push("/(app)/(protected)/cashier/add-user");
+    router.push('/(app)/(protected)/cashier/add-user');
   };
 
   const handleLongPress = (
@@ -91,13 +89,13 @@ export default function UsersListScreen() {
 
   const confirmDeleteUser = (user: UserList) => {
     Alert.alert(
-      "Konfirmasi Hapus",
-      `Apakah Anda yakin ingin menghapus pengguna ${user.first_name} ${user.last_name}?`,
+      'Konfirmasi Hapus',
+      `Apakah Anda yakin ingin menghapus kasir ${user.first_name} ${user.last_name}?`,
       [
-        { text: "Batal", style: "cancel" },
+        { text: 'Batal', style: 'cancel' },
         {
-          text: "Hapus",
-          style: "destructive",
+          text: 'Hapus',
+          style: 'destructive',
           onPress: () => deleteUser(user.id),
         },
       ],
@@ -110,11 +108,10 @@ export default function UsersListScreen() {
       const { error } = await supabase.auth.admin.deleteUser(userId);
       if (error) throw error;
       setUsers(users.filter((user) => user.id !== userId));
-      Alert.alert("Sukses", "Pengguna berhasil dihapus");
+      Alert.alert('Sukses', 'Pengguna berhasil dihapus');
     } catch (error: any) {
-      Alert.alert("Error", "Gagal menghapus pengguna");
+      Alert.alert('Error', 'Gagal menghapus kasir');
     }
-    setModalVisible(false);
   };
 
   const renderUserItem = ({ item }: { item: UserList }) => (
@@ -127,7 +124,7 @@ export default function UsersListScreen() {
       </View>
       <View style={styles.userInfo}>
         <Text style={[styles.userEmail, { color: colors.text }]}>
-          {capitalizeText(item.first_name + " " + item.last_name)}
+          {capitalizeText(item.first_name + ' ' + item.last_name)}
         </Text>
         <Text style={[styles.userMeta, { color: colors.textSecondary }]}>
           Email: {item.email}
@@ -136,10 +133,10 @@ export default function UsersListScreen() {
           Peran: {item.role_name}
         </Text>
         <Text style={[styles.userMeta, { color: colors.textSecondary }]}>
-          Terakhir login:{" "}
+          Terakhir login:{' '}
           {item.last_sign_in_at
             ? new Date(item.last_sign_in_at).toLocaleDateString()
-            : "-"}
+            : '-'}
         </Text>
       </View>
     </TouchableOpacity>
@@ -156,14 +153,14 @@ export default function UsersListScreen() {
       paddingBottom: 80,
     },
     userItem: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: colors.card,
       padding: 16,
       borderRadius: 12,
       marginBottom: 12,
       marginHorizontal: 5,
-      shadowColor: theme === "dark" ? "#000" : colors.primary,
+      shadowColor: theme === 'dark' ? '#000' : colors.primary,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.1,
       shadowRadius: 4,
@@ -173,9 +170,9 @@ export default function UsersListScreen() {
       width: 40,
       height: 40,
       borderRadius: 20,
-      backgroundColor: colors.primary + "20",
-      justifyContent: "center",
-      alignItems: "center",
+      backgroundColor: colors.primary + '20',
+      justifyContent: 'center',
+      alignItems: 'center',
       marginRight: 12,
     },
     userInfo: {
@@ -183,7 +180,7 @@ export default function UsersListScreen() {
     },
     userEmail: {
       fontSize: 16,
-      fontWeight: "500",
+      fontWeight: '500',
       marginBottom: 4,
     },
     userMeta: {
@@ -191,76 +188,47 @@ export default function UsersListScreen() {
     },
     loadingContainer: {
       flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
+      justifyContent: 'center',
+      alignItems: 'center',
       backgroundColor: colors.background,
     },
     errorContainer: {
       padding: 16,
-      backgroundColor: colors.error + "20",
+      backgroundColor: colors.error + '20',
       borderRadius: 8,
       marginBottom: 16,
     },
     errorText: {
       color: colors.error,
-      textAlign: "center",
+      textAlign: 'center',
     },
     addButtonContainer: {
-      position: "absolute",
+      position: 'absolute',
       bottom: 80,
       left: 0,
       right: 0,
-      alignItems: "center",
-      justifyContent: "center",
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     addButton: {
       backgroundColor: colors.primary,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
       paddingHorizontal: 24,
       paddingVertical: 12,
       borderRadius: 30,
-      shadowColor: "#000",
+      shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.3,
       shadowRadius: 4,
       elevation: 5,
     },
     addButtonText: {
-      color: "#FFFFFF",
+      color: '#FFFFFF',
       fontSize: 16,
-      fontWeight: "600",
+      fontWeight: '600',
       marginLeft: 8,
-    },
-    modalContainer: {
-      position: "absolute",
-      width: 150,
-      backgroundColor: colors.card,
-      borderRadius: 8,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.3,
-      shadowRadius: 4,
-      elevation: 5,
-    },
-    modalButton: {
-      padding: 12,
-      alignItems: "center",
-      borderBottomWidth: 1,
-      borderBottomColor: colors.textSecondary + "20",
-    },
-    modalButtonText: {
-      color: colors.text,
-      fontSize: 16,
-    },
-    modalButtonDestructive: {
-      padding: 12,
-      alignItems: "center",
-    },
-    modalButtonDestructiveText: {
-      color: colors.error,
-      fontSize: 16,
     },
   });
 
@@ -269,7 +237,7 @@ export default function UsersListScreen() {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={{ color: colors.text, marginTop: 10 }}>
-          Memuat daftar pengguna...
+          Memuat daftar kasir...
         </Text>
       </View>
     );
@@ -300,10 +268,10 @@ export default function UsersListScreen() {
             <Text
               style={[
                 styles.userMeta,
-                { color: colors.text, textAlign: "center" },
+                { color: colors.text, textAlign: 'center' },
               ]}
             >
-              Tidak ada pengguna ditemukan
+              Tidak ada kasir ditemukan
             </Text>
           }
         />
@@ -316,52 +284,13 @@ export default function UsersListScreen() {
         </TouchableOpacity>
       </View>
 
-      <Modal
-        transparent={true}
+      <UserActionModal
         visible={modalVisible}
-        animationType="none"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <Pressable
-          style={{ flex: 1, backgroundColor: "transparent" }}
-          onPress={() => setModalVisible(false)}
-        >
-          <View
-            style={[
-              styles.modalContainer,
-              {
-                top: modalPosition.y,
-                left: modalPosition.x - 150, // Adjust to align modal
-              },
-            ]}
-          >
-            <Pressable
-              style={styles.modalButton}
-              onPress={() => {
-                if (selectedUser) {
-                  router.push({
-                    pathname: "/(app)/(protected)/cashier/edit-user",
-                    params: { userId: selectedUser.id },
-                  });
-                  setModalVisible(false);
-                }
-              }}
-            >
-              <Text style={styles.modalButtonText}>Edit</Text>
-            </Pressable>
-            <Pressable
-              style={styles.modalButtonDestructive}
-              onPress={() => {
-                if (selectedUser) {
-                  confirmDeleteUser(selectedUser);
-                }
-              }}
-            >
-              <Text style={styles.modalButtonDestructiveText}>Hapus</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
+        onClose={() => setModalVisible(false)}
+        user={selectedUser}
+        position={modalPosition}
+        onDelete={confirmDeleteUser}
+      />
     </SafeAreaView>
   );
 }

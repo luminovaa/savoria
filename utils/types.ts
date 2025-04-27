@@ -55,3 +55,10 @@ export type  MenuItem = {
   updated_at: string;
   isAddButton?: boolean;
 }
+
+export type Category = {
+    id: number;
+    name_category: string;
+    created_at: string;
+    updated_at: string;
+  };

@@ -4,13 +4,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from "rea
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { supabase } from "@/utils/supabase";
 import { capitalizeText } from "@/utils/format";
-
-type Category = {
-  id: number;
-  name_category: string;
-  created_at: string;
-  updated_at: string;
-};
+import { Category } from "@/utils/types"; 
 
 type TypeCardProps = {
   onCategorySelect: (categoryId: number | null) => void;
@@ -18,7 +12,7 @@ type TypeCardProps = {
 };
 
 export default function TypeCard({ onCategorySelect, selectedCategory }: TypeCardProps) {
-  const { theme, colors } = useTheme();
+  const {  colors } = useTheme();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 

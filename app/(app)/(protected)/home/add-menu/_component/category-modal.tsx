@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { capitalizeText } from "@/utils/format";
 
 interface Category {
   id: number;
@@ -99,7 +100,7 @@ const CategoryModal = ({
                 onPress={() => onSelect(item)}
               >
                 <Text style={dynamicStyles.categoryItemText}>
-                  {item.name_category}
+                  {capitalizeText(item.name_category)}
                 </Text>
               </TouchableOpacity>
             )}

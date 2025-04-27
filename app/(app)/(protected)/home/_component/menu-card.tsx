@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Dimensions,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { useRouter } from "expo-router";
@@ -15,6 +16,7 @@ import { supabase } from "@/utils/supabase";
 import { MenuItem } from "@/utils/types";
 import { formatCurrency } from "@/utils/format";
 import { Feather } from "@expo/vector-icons";
+import { MenuActionModal } from "./modal-menu";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -33,11 +35,18 @@ export default function MainCardMenu({
   const [loading, setLoading] = useState(true);
   const { colors } = useTheme();
   const router = useRouter();
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
+  const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
 
   const fetchMenuItems = async () => {
     try {
       setLoading(true);
-      let query = supabase.from("menu").select("*");
+      let query = supabase
+        .from("menu")
+        .select("*")
+        .eq("is_deleted", false) 
+        .eq("is_archive", false); 
 
       if (selectedCategory) {
         query = query.eq("category_id", selectedCategory);
@@ -49,7 +58,29 @@ export default function MainCardMenu({
 
       if (error) throw error;
 
-      const items = data || [];
+      // Get current date in WIB (UTC+7)
+      const currentDate = new Date();
+      const wibOffset = 7 * 60; // WIB is UTC+7, in minutes
+      const wibDate = new Date(
+        currentDate.getTime() + (wibOffset - currentDate.getTimezoneOffset()) * 60 * 1000
+      );
+
+      const normalizeDate = (date: Date) => {
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      };
+
+      const items = (data || []).filter((item: MenuItem) => {
+        if (!item.promo || !item.promo_start || !item.promo_end) {
+          return true;
+        }
+
+        const promoStart = normalizeDate(new Date(item.promo_start));
+        const promoEnd = normalizeDate(new Date(item.promo_end));
+        const normalizedCurrentDate = normalizeDate(wibDate);
+
+        return normalizedCurrentDate >= promoStart && normalizedCurrentDate <= promoEnd;
+      });
+
       setMenuItems([
         ...items,
         {
@@ -66,6 +97,8 @@ export default function MainCardMenu({
           created_at: "",
           updated_at: "",
           isAddButton: true,
+          is_deleted: false,
+          is_archive: false,
         },
       ]);
     } catch (error) {
@@ -99,6 +132,64 @@ export default function MainCardMenu({
 
   const handleAddMenu = () => {
     router.push("/(app)/(protected)/home/add-menu");
+  };
+
+  const handleLongPress = (
+    item: MenuItem,
+    event: { nativeEvent: { pageX: number; pageY: number } }
+  ) => {
+    if (item.id === 0) return; // Don't show modal for "Tambah Menu" button
+    setSelectedMenuItem(item);
+    setModalPosition({ x: event.nativeEvent.pageX, y: event.nativeEvent.pageY });
+    setModalVisible(true);
+  };
+
+  const confirmDeleteMenuItem = (item: MenuItem) => {
+    Alert.alert(
+      'Konfirmasi Hapus',
+      `Apakah Anda yakin ingin menghapus menu ${item.name_menu}?`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Hapus',
+          style: 'destructive',
+          onPress: () => softDeleteMenuItem(item.id),
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const softDeleteMenuItem = async (menuId: number) => {
+    try {
+      const { error } = await supabase
+        .from("menu")
+        .update({ is_deleted: true, updated_at: new Date().toISOString() })
+        .eq("id", menuId);
+
+      if (error) throw error;
+
+      setMenuItems(menuItems.filter((item) => item.id !== menuId));
+      Alert.alert('Sukses', 'Menu berhasil dihapus');
+    } catch (error: any) {
+      Alert.alert('Error', 'Gagal menghapus menu: ' + error.message);
+    }
+  };
+
+  const archiveMenuItem = async (item: MenuItem) => {
+    try {
+      const { error } = await supabase
+        .from("menu")
+        .update({ is_archive: true, updated_at: new Date().toISOString() })
+        .eq("id", item.id);
+
+      if (error) throw error;
+
+      setMenuItems(menuItems.filter((menu) => menu.id !== item.id));
+      Alert.alert('Sukses', 'Menu berhasil diarsipkan');
+    } catch (error: any) {
+      Alert.alert('Error', 'Gagal mengarsipkan menu: ' + error.message);
+    }
   };
 
   const styles = StyleSheet.create({
@@ -188,7 +279,8 @@ export default function MainCardMenu({
     },
     price: {
       fontSize: 13,
-      color: colors.textSecondary,
+      color: colors.primary,
+      fontWeight: "600",
     },
     originalPrice: {
       fontSize: 12,
@@ -269,7 +361,10 @@ export default function MainCardMenu({
     const hasPromo = item.promo && item.promo_price !== null;
 
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        onLongPress={(event) => handleLongPress(item, event)}
+      >
         {hasPromo && (
           <View style={styles.labelPromo}>
             <Text style={styles.labelPromoText}>PROMO</Text>
@@ -339,7 +434,7 @@ export default function MainCardMenu({
             </TouchableOpacity>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -361,7 +456,15 @@ export default function MainCardMenu({
         columnWrapperStyle={styles.row}
         contentContainerStyle={styles.list}
         scrollEnabled={false}
-        extraData={cart} // Tambahkan ini
+        extraData={cart}
+      />
+      <MenuActionModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        menu={selectedMenuItem}
+        position={modalPosition}
+        onDelete={confirmDeleteMenuItem}
+        onArchive={archiveMenuItem}
       />
     </View>
   );

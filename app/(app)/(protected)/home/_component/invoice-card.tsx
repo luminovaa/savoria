@@ -24,32 +24,37 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const [loading, setLoading] = useState(true);
   const { colors } = useTheme();
 
-  const fetchMenuItems = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("menu")
-        .select("*")
-        .in("id", Object.keys(cart));
-
-      if (error) throw error;
-
-      setMenuItems(data || []);
-    } catch (error) {
-      console.error("Error fetching menu items for cart:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (Object.keys(cart).length > 0) {
+      const cartIds = Object.keys(cart);
       const existingIds = menuItems.map(item => item.id.toString());
-      const newIds = Object.keys(cart).filter(id => !existingIds.includes(id));
+      const newIds = cartIds.filter(id => !existingIds.includes(id));
       
       if (newIds.length > 0) {
-        fetchMenuItems();
+        const fetchNewItems = async () => {
+          try {
+            setLoading(true);
+            const { data, error } = await supabase
+              .from("menu")
+              .select("*")
+              .in("id", newIds);
+    
+            if (error) throw error;
+    
+            setMenuItems(prev => [...prev, ...(data || [])]);
+          } catch (error) {
+            console.error("Error fetching menu items for cart:", error);
+          } finally {
+            setLoading(false);
+          }
+        };
+        
+        fetchNewItems();
       }
+      
+      setMenuItems(prev => prev.filter(item => 
+        Object.keys(cart).includes(item.id.toString())
+      ));
     } else {
       setMenuItems([]);
       setLoading(false);
@@ -72,18 +77,22 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const updateQuantity = (id: string, delta: number) => {
     setCart((prevCart) => {
       const newQuantity = (prevCart[id] || 0) + delta;
+      
       if (newQuantity <= 0) {
-        const { [id]: _, ...rest } = prevCart;
-        return rest;
+        const newCart = {...prevCart};
+        delete newCart[id]; 
+        return newCart;
       }
+      
       return { ...prevCart, [id]: newQuantity };
     });
   };
 
   const removeItem = (id: string) => {
     setCart((prevCart) => {
-      const { [id]: _, ...rest } = prevCart;
-      return rest;
+      const newCart = {...prevCart};
+      delete newCart[id]; 
+      return newCart;
     });
   };
 
@@ -225,11 +234,11 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       alignItems: "center",
     },
     itemImage: {
-      width: 60, // sedikit lebih besar
-      height: 60, // sedikit lebih besar
+      width: 60, 
+      height: 60, 
       borderRadius: 8,
       backgroundColor: colors.border,
-      marginBottom: 8, // beri jarak dengan quantity
+      marginBottom: 8, 
     },
     quantityContainer: {
       flexDirection: "row",
