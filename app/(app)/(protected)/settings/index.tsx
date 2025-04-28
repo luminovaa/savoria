@@ -80,6 +80,16 @@ export default function SettingScreen() {
             colors={colors}
             styles={styles}
           />
+          <SettingItem
+            icon="shopping-cart"
+            title="Arsip Menu"
+            description="Menu yang tidak di tampilkan di Menu Utama"
+            onPress={() =>
+              router.push("/(app)/(protected)/settings/archive-menu")
+            }
+            colors={colors}
+            styles={styles}
+          />
         </View>
 
         <View style={styles.section}>

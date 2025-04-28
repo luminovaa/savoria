@@ -22,9 +22,13 @@ type InvoiceCartProps = {
 export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [invoiceNumber, setInvoiceNumber] = useState<string>("");
   const { colors } = useTheme();
 
   useEffect(() => {
+    // Generate a unique invoice number when component mounts
+    generateUniqueInvoiceNumber();
+    
     if (Object.keys(cart).length > 0) {
       const cartIds = Object.keys(cart);
       const existingIds = menuItems.map(item => item.id.toString());
@@ -96,17 +100,58 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     });
   };
 
+  const generateRandomInvoiceNumber = () => {
+    const randomNum = Math.floor(100000 + Math.random() * 900000); // Generates a 6-digit number
+    return `INV-${randomNum}`;
+  };
+
+  const generateUniqueInvoiceNumber = async () => {
+    let isUnique = false;
+    let proposedInvoiceNumber = '';
+    
+    while (!isUnique) {
+      proposedInvoiceNumber = generateRandomInvoiceNumber();
+      
+      // Check if invoice number already exists in database
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("invoice_number", proposedInvoiceNumber)
+        .limit(1);
+      
+      if (error) {
+        console.error("Error checking invoice number:", error);
+        // If there's an error, we'll just use the generated number
+        isUnique = true;
+      } else {
+        // If no data returned, the invoice number is unique
+        isUnique = data.length === 0;
+      }
+    }
+    
+    setInvoiceNumber(proposedInvoiceNumber);
+    return proposedInvoiceNumber;
+  };
+
   const handleOrder = async () => {
     try {
       const total = calculateTotal();
 
+      // Fetch the current user's ID from Supabase auth
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) throw new Error("No user is logged in");
+
+      const userId = user.id;
+
+      // Use the already generated unique invoice number
       const { data: orderData, error: orderError } = await supabase
         .from("orders")
         .insert({
           created_at: new Date().toISOString(),
-          invoice_number: `INV-${Date.now()}`,
+          invoice_number: invoiceNumber,
           total: Object.values(cart).reduce((sum, qty) => sum + qty, 0),
           total_amount: total,
+          user_id: userId,
           payment_type: "cash",
           status: "completed",
         })
@@ -132,6 +177,8 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
 
       if (itemsError) throw itemsError;
 
+      // Generate a new invoice number for the next order
+      await generateUniqueInvoiceNumber();
       setCart({});
     } catch (error) {
       console.error("Error placing order:", error);
@@ -145,7 +192,6 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      // backgroundColor: colors.background,
     },
     header: {
       flexDirection: "row",
@@ -163,6 +209,26 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       fontSize: 18,
       fontWeight: "bold",
       color: colors.text,
+    },
+    invoiceNumberContainer: {
+      backgroundColor: colors.card,
+      padding: 12,
+      borderRadius: 8,
+      marginBottom: 15,
+      borderWidth: 1,
+      borderColor: colors.border,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    invoiceNumberLabel: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      marginRight: 8,
+    },
+    invoiceNumberText: {
+      fontSize: 16,
+      fontWeight: "bold",
+      color: colors.primary,
     },
     itemCount: {
       marginLeft: "auto",
@@ -187,7 +253,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "flex-start",
-      marginBottom: 8, // tambahkan margin bottom
+      marginBottom: 8,
     },
     priceContainer: {
       alignItems: "flex-end",
@@ -366,6 +432,19 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
           </View>
         )}
       </View>
+
+      {menuItems.length > 0 && (
+        <View style={styles.invoiceNumberContainer}>
+          <Feather
+            name="file-text"
+            size={16}
+            color={colors.primary}
+            style={{ marginRight: 8 }}
+          />
+          <Text style={styles.invoiceNumberLabel}>Nomor Invoice:</Text>
+          <Text style={styles.invoiceNumberText}>{invoiceNumber}</Text>
+        </View>
+      )}
 
       {menuItems.length === 0 ? (
         <View style={styles.emptyContainer}>
