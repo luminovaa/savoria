@@ -7,12 +7,17 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  ScrollView,
+  Dimensions,
 } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { supabase } from "@/utils/supabase";
 import { formatCurrency } from "@/utils/format";
 import { MenuItem } from "@/utils/types";
 import { Feather } from "@expo/vector-icons";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const isTablet = SCREEN_WIDTH > 600; // Define tablet as width > 600px
 
 type InvoiceCartProps = {
   cart: { [id: string]: number };
@@ -28,12 +33,12 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   useEffect(() => {
     // Generate a unique invoice number when component mounts
     generateUniqueInvoiceNumber();
-    
+
     if (Object.keys(cart).length > 0) {
       const cartIds = Object.keys(cart);
-      const existingIds = menuItems.map(item => item.id.toString());
-      const newIds = cartIds.filter(id => !existingIds.includes(id));
-      
+      const existingIds = menuItems.map((item) => item.id.toString());
+      const newIds = cartIds.filter((id) => !existingIds.includes(id));
+
       if (newIds.length > 0) {
         const fetchNewItems = async () => {
           try {
@@ -42,29 +47,29 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
               .from("menu")
               .select("*")
               .in("id", newIds);
-    
+
             if (error) throw error;
-    
-            setMenuItems(prev => [...prev, ...(data || [])]);
+
+            setMenuItems((prev) => [...prev, ...(data || [])]);
           } catch (error) {
             console.error("Error fetching menu items for cart:", error);
           } finally {
             setLoading(false);
           }
         };
-        
+
         fetchNewItems();
       }
-      
-      setMenuItems(prev => prev.filter(item => 
-        Object.keys(cart).includes(item.id.toString())
-      ));
+
+      setMenuItems((prev) =>
+        prev.filter((item) => Object.keys(cart).includes(item.id.toString()))
+      );
     } else {
       setMenuItems([]);
       setLoading(false);
     }
   }, [cart]);
-  
+
   const calculateSubtotal = (item: MenuItem, quantity: number) => {
     const price =
       item.promo && item.promo_price ? item.promo_price : item.price;
@@ -81,21 +86,21 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const updateQuantity = (id: string, delta: number) => {
     setCart((prevCart) => {
       const newQuantity = (prevCart[id] || 0) + delta;
-      
+
       if (newQuantity <= 0) {
-        const newCart = {...prevCart};
-        delete newCart[id]; 
+        const newCart = { ...prevCart };
+        delete newCart[id];
         return newCart;
       }
-      
+
       return { ...prevCart, [id]: newQuantity };
     });
   };
 
   const removeItem = (id: string) => {
     setCart((prevCart) => {
-      const newCart = {...prevCart};
-      delete newCart[id]; 
+      const newCart = { ...prevCart };
+      delete newCart[id];
       return newCart;
     });
   };
@@ -107,18 +112,18 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
 
   const generateUniqueInvoiceNumber = async () => {
     let isUnique = false;
-    let proposedInvoiceNumber = '';
-    
+    let proposedInvoiceNumber = "";
+
     while (!isUnique) {
       proposedInvoiceNumber = generateRandomInvoiceNumber();
-      
+
       // Check if invoice number already exists in database
       const { data, error } = await supabase
         .from("orders")
         .select("id")
         .eq("invoice_number", proposedInvoiceNumber)
         .limit(1);
-      
+
       if (error) {
         console.error("Error checking invoice number:", error);
         // If there's an error, we'll just use the generated number
@@ -128,7 +133,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
         isUnique = data.length === 0;
       }
     }
-    
+
     setInvoiceNumber(proposedInvoiceNumber);
     return proposedInvoiceNumber;
   };
@@ -138,7 +143,10 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       const total = calculateTotal();
 
       // Fetch the current user's ID from Supabase auth
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
       if (authError || !user) throw new Error("No user is logged in");
 
       const userId = user.id;
@@ -192,6 +200,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const styles = StyleSheet.create({
     container: {
       flex: 1,
+      paddingHorizontal: isTablet ? 15 : 10, // Slightly less padding on phones
     },
     header: {
       flexDirection: "row",
@@ -206,13 +215,13 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       color: colors.primary,
     },
     headerText: {
-      fontSize: 18,
+      fontSize: isTablet ? 18 : 16, // Smaller font on phones
       fontWeight: "bold",
       color: colors.text,
     },
     invoiceNumberContainer: {
       backgroundColor: colors.card,
-      padding: 12,
+      padding: isTablet ? 12 : 10, // Slightly less padding on phones
       borderRadius: 8,
       marginBottom: 15,
       borderWidth: 1,
@@ -221,12 +230,12 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       alignItems: "center",
     },
     invoiceNumberLabel: {
-      fontSize: 14,
+      fontSize: isTablet ? 14 : 12, // Smaller font on phones
       color: colors.textSecondary,
       marginRight: 8,
     },
     invoiceNumberText: {
-      fontSize: 16,
+      fontSize: isTablet ? 16 : 14, // Smaller font on phones
       fontWeight: "bold",
       color: colors.primary,
     },
@@ -240,7 +249,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     itemCountText: {
       color: colors.card,
       fontWeight: "bold",
-      fontSize: 12,
+      fontSize: isTablet ? 12 : 10, // Smaller font on phones
     },
     listContainer: {
       flex: 1,
@@ -259,26 +268,26 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       alignItems: "flex-end",
     },
     itemName: {
-      fontSize: 15,
+      fontSize: isTablet ? 15 : 14, // Smaller font on phones
       fontWeight: "600",
       color: colors.text,
       flex: 1,
     },
     priceText: {
-      fontSize: 15,
+      fontSize: isTablet ? 15 : 14, // Smaller font on phones
       fontWeight: "600",
       color: colors.text,
       textAlign: "right",
     },
     originalPrice: {
-      fontSize: 12,
+      fontSize: isTablet ? 12 : 10, // Smaller font on phones
       color: colors.textSecondary,
       textDecorationLine: "line-through",
       marginBottom: 2,
       textAlign: "right",
     },
     promoPrice: {
-      fontSize: 15,
+      fontSize: isTablet ? 15 : 14, // Smaller font on phones
       fontWeight: "600",
       color: colors.primary,
       textAlign: "right",
@@ -291,20 +300,20 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     },
     itemContainer: {
       flexDirection: "row",
-      paddingVertical: 12,
+      paddingVertical: isTablet ? 12 : 10, // Slightly less padding on phones
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
     imageContainer: {
-      marginRight: 12,
+      marginRight: isTablet ? 12 : 10, // Slightly less margin on phones
       alignItems: "center",
     },
     itemImage: {
-      width: 60, 
-      height: 60, 
+      width: isTablet ? 60 : 50, // Smaller image on phones
+      height: isTablet ? 60 : 50, // Smaller image on phones
       borderRadius: 8,
       backgroundColor: colors.border,
-      marginBottom: 8, 
+      marginBottom: 8,
     },
     quantityContainer: {
       flexDirection: "row",
@@ -313,23 +322,23 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       borderRadius: 20,
       borderWidth: 1,
       borderColor: colors.border,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
+      paddingHorizontal: isTablet ? 8 : 6, // Slightly less padding on phones
+      paddingVertical: isTablet ? 4 : 3, // Slightly less padding on phones
     },
     quantityButton: {
-      padding: 4,
+      padding: isTablet ? 4 : 3, // Slightly less padding on phones
       borderRadius: 15,
     },
     quantityText: {
       fontWeight: "600",
-      fontSize: 14,
+      fontSize: isTablet ? 14 : 12, // Smaller font on phones
       color: colors.text,
-      marginHorizontal: 10,
+      marginHorizontal: isTablet ? 10 : 8, // Slightly less margin on phones
       minWidth: 20,
       textAlign: "center",
     },
     removeButton: {
-      padding: 4,
+      padding: isTablet ? 4 : 3, // Slightly less padding on phones
     },
     totalSection: {
       marginTop: 15,
@@ -343,11 +352,11 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       marginBottom: 5,
     },
     subtotalText: {
-      fontSize: 14,
+      fontSize: isTablet ? 14 : 12, // Smaller font on phones
       color: colors.textSecondary,
     },
     subtotalAmount: {
-      fontSize: 14,
+      fontSize: isTablet ? 14 : 12, // Smaller font on phones
       color: colors.textSecondary,
     },
     totalRow: {
@@ -356,26 +365,27 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       marginTop: 5,
     },
     totalText: {
-      fontSize: 18,
+      fontSize: isTablet ? 18 : 16, // Smaller font on phones
       fontWeight: "bold",
       color: colors.text,
     },
     totalAmount: {
-      fontSize: 18,
+      fontSize: isTablet ? 18 : 16, // Smaller font on phones
       fontWeight: "bold",
       color: colors.primary,
     },
     orderButton: {
       marginTop: 15,
-      paddingVertical: 12,
+      paddingVertical: isTablet ? 12 : 10, // Slightly less padding on phones
       backgroundColor: colors.primary,
       borderRadius: 8,
       alignItems: "center",
       justifyContent: "center",
       flexDirection: "row",
+      marginBottom: 15, // Add marginBottom to ensure button is not cut off in ScrollView
     },
     orderButtonText: {
-      fontSize: 16,
+      fontSize: isTablet ? 16 : 14, // Smaller font on phones
       fontWeight: "bold",
       color: colors.card,
       marginLeft: 8,
@@ -391,12 +401,12 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       marginBottom: 15,
     },
     emptyText: {
-      fontSize: 15,
+      fontSize: isTablet ? 15 : 14, // Smaller font on phones
       color: colors.textSecondary,
       textAlign: "center",
     },
     emptySubtext: {
-      fontSize: 13,
+      fontSize: isTablet ? 13 : 12, // Smaller font on phones
       color: colors.textSecondary,
       textAlign: "center",
       marginTop: 5,
@@ -417,7 +427,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Feather
           name="shopping-bag"
@@ -481,19 +491,19 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
                     </View>
                     <View style={styles.itemInfo}>
                       <View style={styles.itemNameContainer}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.itemName} numberOfLines={2}>
-                          {item.name_menu}
-                        </Text>
-                        {isPromo ? (
-                          <Text style={styles.subtotalText}>
-                            {formatCurrency(item.promo_price!)}
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.itemName} numberOfLines={2}>
+                            {item.name_menu}
                           </Text>
-                        ) : (
-                          <Text style={styles.subtotalText}>
-                            {formatCurrency(item.price)}
-                          </Text>
-                        )}
+                          {isPromo ? (
+                            <Text style={styles.subtotalText}>
+                              {formatCurrency(item.promo_price!)}
+                            </Text>
+                          ) : (
+                            <Text style={styles.subtotalText}>
+                              {formatCurrency(item.price)}
+                            </Text>
+                          )}
                         </View>
                         {isPromo ? (
                           <View style={styles.priceContainer}>
@@ -582,6 +592,6 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
           </TouchableOpacity>
         </>
       )}
-    </View>
+    </ScrollView>
   );
 }

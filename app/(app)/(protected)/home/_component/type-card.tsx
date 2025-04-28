@@ -1,6 +1,14 @@
 import { useTheme } from "@/hooks/use-theme";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
+import { 
+  StyleSheet, 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  ActivityIndicator, 
+  ScrollView,
+  Dimensions 
+} from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { supabase } from "@/utils/supabase";
 import { capitalizeText } from "@/utils/format";
@@ -12,9 +20,11 @@ type TypeCardProps = {
 };
 
 export default function TypeCard({ onCategorySelect, selectedCategory }: TypeCardProps) {
-  const {  colors } = useTheme();
+  const { colors } = useTheme();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const screenWidth = Dimensions.get("window").width;
+  const isTablet = screenWidth > 600;
 
   useEffect(() => {
     fetchCategories();
@@ -55,32 +65,39 @@ export default function TypeCard({ onCategorySelect, selectedCategory }: TypeCar
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      flexDirection: "column",
+      flexDirection: isTablet ? "column" : "row",
       justifyContent: "flex-start",
-      alignItems: "center",
+      alignItems: isTablet ? "center" : "flex-start",
       padding: 15,
       borderRadius: 20,
     },
+    scrollContainer: {
+      flexDirection: "row",
+    },
     item: {
-      flexDirection: "column",
+      flexDirection: isTablet ? "column" : "row",
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: colors.card,
       borderRadius: 12,
-      paddingVertical: 15,
-      paddingHorizontal: 7,
-      marginVertical: 8,
-      width: 80, 
+      paddingVertical: isTablet ? 15 : 10,
+      paddingHorizontal: isTablet ? 7 : 15,
+      marginVertical: isTablet ? 8 : 0,
+      marginRight: isTablet ? 0 : 8,
+      width: isTablet ? 80 : "auto",
+      minHeight: isTablet ? undefined : 40,
     },
     selectedItem: {
       backgroundColor: colors.secondary,
     },
     iconContainer: {
-      marginBottom: 8, 
+      marginBottom: isTablet ? 8 : 0,
+      marginRight: isTablet ? 0 : 8,
+      display: isTablet ? "flex" : "none",
     },
     text: {
       color: colors.textSecondary,
-      fontSize: 14, 
+      fontSize: 14,
       fontWeight: "500",
       textAlign: "center",
     },
@@ -98,8 +115,8 @@ export default function TypeCard({ onCategorySelect, selectedCategory }: TypeCar
     );
   }
 
-  return (
-    <View style={styles.container}>
+  const renderContent = () => (
+    <>
       <TouchableOpacity 
         onPress={() => onCategorySelect(null)}
         style={[
@@ -146,6 +163,22 @@ export default function TypeCard({ onCategorySelect, selectedCategory }: TypeCar
           </Text>
         </TouchableOpacity>
       ))}
+    </>
+  );
+
+  return (
+    <View style={styles.container}>
+      {isTablet ? (
+        renderContent()
+      ) : (
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContainer}
+        >
+          {renderContent()}
+        </ScrollView>
+      )}
     </View>
   );
 }

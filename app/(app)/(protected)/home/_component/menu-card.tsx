@@ -9,6 +9,7 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { useRouter } from "expo-router";
@@ -18,8 +19,9 @@ import { formatCurrency } from "@/utils/format";
 import { Feather } from "@expo/vector-icons";
 import { MenuActionModal } from "./modal-menu";
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+const isTablet = SCREEN_WIDTH > 600; 
 type MainCardMenuProps = {
   selectedCategory: number | null;
   cart: { [id: string]: number };
@@ -213,7 +215,7 @@ export default function MainCardMenu({
     },
     card: {
       borderRadius: 12,
-      width: "23.8%",
+      width: isTablet ? "23.8%" : "48%", // 2 cards per row on phone, 4 on tablet
       overflow: "hidden",
       borderWidth: 1,
       borderColor: colors.border,
@@ -243,7 +245,7 @@ export default function MainCardMenu({
     },
     addButtonCard: {
       borderRadius: 12,
-      width: "23.8%",
+      width: isTablet ? "23.8%" : "48%", // Match card width
       borderWidth: 1,
       borderColor: colors.border,
       borderStyle: "dashed",
@@ -452,7 +454,7 @@ export default function MainCardMenu({
         data={menuItems}
         renderItem={renderItem}
         keyExtractor={(item) => item.id.toString()}
-        numColumns={4}
+        numColumns={isTablet ? 4 : 2} // 2 columns on phone, 4 on tablet
         columnWrapperStyle={styles.row}
         contentContainerStyle={styles.list}
         scrollEnabled={false}
@@ -468,4 +470,5 @@ export default function MainCardMenu({
       />
     </View>
   );
+
 }
