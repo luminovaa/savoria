@@ -31,45 +31,56 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const { colors } = useTheme();
 
   useEffect(() => {
-    // Generate a unique invoice number when component mounts
     generateUniqueInvoiceNumber();
-
+  
     if (Object.keys(cart).length > 0) {
       const cartIds = Object.keys(cart);
-      const existingIds = menuItems.map((item) => item.id.toString());
-      const newIds = cartIds.filter((id) => !existingIds.includes(id));
-
-      if (newIds.length > 0) {
-        const fetchNewItems = async () => {
-          try {
-            setLoading(true);
+  
+      const fetchNewItems = async () => {
+        try {
+          setLoading(true);
+          // Only fetch items that aren't already in menuItems
+          const existingIds = menuItems.map((item) => item.id.toString());
+          const newIds = cartIds.filter((id) => !existingIds.includes(id));
+  
+          let newItems: MenuItem[] = [];
+          if (newIds.length > 0) {
             const { data, error } = await supabase
               .from("menu")
               .select("*")
               .in("id", newIds);
-
+  
             if (error) throw error;
-
-            setMenuItems((prev) => [...prev, ...(data || [])]);
-          } catch (error) {
-            console.error("Error fetching menu items for cart:", error);
-          } finally {
-            setLoading(false);
+            newItems = data || [];
           }
-        };
-
-        fetchNewItems();
-      }
-
-      setMenuItems((prev) =>
-        prev.filter((item) => Object.keys(cart).includes(item.id.toString()))
-      );
+  
+          // Update menuItems: combine existing items, new items, and filter by cart
+          setMenuItems((prev) => {
+            // Combine existing and new items
+            const combined = [...prev, ...newItems];
+            // Deduplicate by id
+            const uniqueItems = Array.from(
+              new Map(combined.map((item) => [item.id, item])).values()
+            );
+            // Only keep items that are in the cart
+            return uniqueItems.filter((item) =>
+              cartIds.includes(item.id.toString())
+            );
+          });
+        } catch (error) {
+          console.error("Error fetching menu items for cart:", error);
+        } finally {
+          setLoading(false);
+        }
+      };
+  
+      fetchNewItems();
     } else {
       setMenuItems([]);
       setLoading(false);
     }
   }, [cart]);
-
+  
   const calculateSubtotal = (item: MenuItem, quantity: number) => {
     const price =
       item.promo && item.promo_price ? item.promo_price : item.price;

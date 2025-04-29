@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Dimensions,
+  ScrollView,
 } from "react-native";
 import { supabase } from "@/utils/supabase";
 import { useTheme } from "@/hooks/use-theme";
@@ -17,11 +18,13 @@ import { useRouter } from "expo-router";
 import { formatCurrency } from "@/utils/format";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Order } from "@/utils/types";
+import { Picker } from '@react-native-picker/picker';
 
 export default function OrderHistoryScreen() {
   const { colors, theme } = useTheme();
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,8 +33,81 @@ export default function OrderHistoryScreen() {
   const [page, setPage] = useState(0);
   const LIMIT = 10;
   
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  
   const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
   const isTablet = SCREEN_WIDTH > 600;
+
+  const stats = useMemo(() => {
+    if (!allOrders.length) {
+      return {
+        todayOrders: 0,
+        todayRevenue: 0,
+        monthlyRevenue: 0,
+        yearlyRevenue: 0
+      };
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayOrdersArray = allOrders.filter(order => {
+      const orderDate = new Date(order.created_at);
+      orderDate.setHours(0, 0, 0, 0);
+      return orderDate.getTime() === today.getTime() && order.status.toLowerCase() !== 'cancelled';
+    });
+
+    const todayRevenue = todayOrdersArray.reduce((sum, order) => 
+      sum + (order.total_amount || 0), 0);
+
+    const monthlyOrdersArray = allOrders.filter(order => {
+      const orderDate = new Date(order.created_at);
+      return orderDate.getMonth() + 1 === selectedMonth && 
+             orderDate.getFullYear() === selectedYear &&
+             order.status.toLowerCase() !== 'cancelled';
+    });
+
+    const monthlyRevenue = monthlyOrdersArray.reduce((sum, order) => 
+      sum + (order.total_amount || 0), 0);
+
+    const yearlyOrdersArray = allOrders.filter(order => {
+      const orderDate = new Date(order.created_at);
+      return orderDate.getFullYear() === selectedYear &&
+             order.status.toLowerCase() !== 'cancelled';
+    });
+
+    const yearlyRevenue = yearlyOrdersArray.reduce((sum, order) => 
+      sum + (order.total_amount || 0), 0);
+
+    return {
+      todayOrders: todayOrdersArray.length,
+      todayRevenue,
+      monthlyRevenue,
+      yearlyRevenue
+    };
+  }, [allOrders, selectedMonth, selectedYear]);
+
+  const fetchAllOrders = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const orderData = data || [];
+      
+      setAllOrders(orderData);
+    } catch (error: any) {
+      setError(error.message);
+      Alert.alert("Error", "Gagal memuat data pesanan");
+    }
+  }, []);
 
   const fetchOrders = useCallback(async (pageNumber = 0, refresh = false) => {
     try {
@@ -44,20 +120,31 @@ export default function OrderHistoryScreen() {
       const from = pageNumber * LIMIT;
       const to = from + LIMIT - 1;
 
-      const { data, error, count } = await supabase
+      let query = supabase
         .from("orders")
         .select("*", { count: "exact" })
-        .order("created_at", { ascending: false })
-        .range(from, to);
+        .order("created_at", { ascending: false });
+
+      const startDate = new Date(selectedYear, selectedMonth - 1, 1);
+      const endDate = new Date(selectedYear, selectedMonth, 0);
+      endDate.setHours(23, 59, 59, 999);
+
+      query = query.gte('created_at', startDate.toISOString())
+                   .lte('created_at', endDate.toISOString());
+
+      if (pageNumber > 0) {
+        query = query.range(from, to);
+      } else {
+        query = query.limit(LIMIT);
+      }
+
+      const { data, error, count } = await query;
 
       if (error) throw error;
 
-      // Make sure data is not null
       const orderData = data || [];
       
-      // Ensure each order has a unique ID
       const ordersWithCheckedIds = orderData.map((order: any) => {
-        // If for some reason an order doesn't have an ID, generate a unique one
         if (!order.id) {
           order.id = Date.now().toString() + Math.random().toString(36).substring(2, 9);
         }
@@ -67,7 +154,6 @@ export default function OrderHistoryScreen() {
       if (refresh) {
         setOrders(ordersWithCheckedIds);
       } else {
-        // Prevent duplicate orders by checking IDs
         setOrders(prevOrders => {
           const existingIds = new Set(prevOrders.map(order => order.id));
           const newOrders = ordersWithCheckedIds.filter(order => !existingIds.has(order.id));
@@ -75,9 +161,10 @@ export default function OrderHistoryScreen() {
         });
       }
 
-      // Check if we've loaded all orders
       if (orderData.length < LIMIT) {
         setHasMore(false);
+      } else {
+        setHasMore(true);
       }
       
       setPage(pageNumber);
@@ -89,17 +176,22 @@ export default function OrderHistoryScreen() {
       setLoadingMore(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [selectedMonth, selectedYear]);
 
   useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+    fetchAllOrders();
+  }, [fetchAllOrders]);
+
+  useEffect(() => {
+    fetchOrders(0, true);
+  }, [fetchOrders, selectedMonth, selectedYear]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
     setHasMore(true);
+    fetchAllOrders();
     fetchOrders(0, true);
-  }, [fetchOrders]);
+  }, [fetchOrders, fetchAllOrders]);
 
   const handleLoadMore = useCallback(() => {
     if (!loadingMore && hasMore) {
@@ -108,7 +200,6 @@ export default function OrderHistoryScreen() {
   }, [fetchOrders, loadingMore, hasMore, page]);
 
   const handleViewOrderDetails = (order: Order) => {
-    // Navigate to order details page
     router.push({
       pathname: "/(app)/(protected)/order/[id]",
       params: { id: order.id }
@@ -124,6 +215,98 @@ export default function OrderHistoryScreen() {
       default:
         return colors.textSecondary;
     }
+  };
+
+  const renderMonthPicker = () => {
+    const months = [
+      { label: 'Januari', value: 1 },
+      { label: 'Februari', value: 2 },
+      { label: 'Maret', value: 3 },
+      { label: 'April', value: 4 },
+      { label: 'Mei', value: 5 },
+      { label: 'Juni', value: 6 },
+      { label: 'Juli', value: 7 },
+      { label: 'Agustus', value: 8 },
+      { label: 'September', value: 9 },
+      { label: 'Oktober', value: 10 },
+      { label: 'November', value: 11 },
+      { label: 'Desember', value: 12 },
+    ];
+
+    const years = [];
+    const currentYear = new Date().getFullYear();
+    for (let i = currentYear - 5; i <= currentYear; i++) {
+      years.push({ label: i.toString(), value: i });
+    }
+
+    return (
+      <View style={styles.filterContainer}>
+        <View style={styles.filterRow}>
+          <View style={[styles.pickerContainer, { marginRight: 8 }]}>
+            <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Bulan</Text>
+            <View style={[styles.picker, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Picker
+                selectedValue={selectedMonth}
+                onValueChange={(value) => setSelectedMonth(value)}
+                style={{ color: colors.text }}
+                dropdownIconColor={colors.text}
+              >
+                {months.map((month) => (
+                  <Picker.Item key={`month-${month.value}`} label={month.label} value={month.value} />
+                ))}
+              </Picker>
+            </View>
+          </View>
+          
+          <View style={styles.pickerContainer}>
+            <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Tahun</Text>
+            <View style={[styles.picker, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Picker
+                selectedValue={selectedYear}
+                onValueChange={(value) => setSelectedYear(value)}
+                style={{ color: colors.text }}
+                dropdownIconColor={colors.text}
+              >
+                {years.map((year) => (
+                  <Picker.Item key={`year-${year.value}`} label={year.label} value={year.value} />
+                ))}
+              </Picker>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderStatCards = () => {
+    return (
+      <View style={styles.statsContainer}>
+        <View style={styles.statsRow}>
+          <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Penjualan Hari Ini</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{stats.todayOrders}</Text>
+            <Text style={[styles.statUnit, { color: colors.primary }]}>Pesanan</Text>
+          </View>
+          
+          <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Hari Ini</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.todayRevenue)}</Text>
+          </View>
+        </View>
+        
+        <View style={styles.statsRow}>
+          <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Bulan Ini</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.monthlyRevenue)}</Text>
+          </View>
+          
+          <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Tahun Ini</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.yearlyRevenue)}</Text>
+          </View>
+        </View>
+      </View>
+    );
   };
 
   const renderOrderItem = ({ item }: { item: Order }) => {
@@ -192,11 +375,11 @@ export default function OrderHistoryScreen() {
     },
     content: {
       flex: 1,
-      padding: 16,
     },
     headerContainer: {
+    marginTop: isTablet ? 0 : -35,
       marginBottom: 16,
-      marginTop: isTablet ? 0 : -40,
+      paddingHorizontal: 16,
       flexDirection: "column",
       justifyContent: "center",
       alignItems: "center"
@@ -210,12 +393,75 @@ export default function OrderHistoryScreen() {
     headerSubtitle: {
       fontSize: 14,
       color: colors.textSecondary,
+      textAlign: "center",
+    },
+    filterContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: colors.background,
+    },
+    filterRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    pickerContainer: {
+      flex: 1,
+    },
+    pickerLabel: {
+      fontSize: 12,
+      marginBottom: 4,
+    },
+    picker: {
+      borderRadius: 8,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    statsContainer: {
+      paddingHorizontal: 16,
+      paddingBottom: 16,
+    },
+    statsRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 12,
+    },
+    statCard: {
+      flex: 1,
+      borderRadius: 12,
+      borderWidth: 1,
+      padding: 12,
+      marginHorizontal: 4,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: theme === "dark" ? "#000" : colors.primary,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    statLabel: {
+      fontSize: 12,
+      textAlign: "center",
+      marginBottom: 4,
+    },
+    statValue: {
+      fontSize: 16,
+      fontWeight: "bold",
+      textAlign: "center",
+    },
+    statUnit: {
+      fontSize: 11,
+      marginTop: 2,
+    },
+    listContainer: {
+      flex: 1,
+      paddingTop: 8,
     },
     orderItem: {
       backgroundColor: colors.card,
       borderRadius: 12,
       padding: 16,
-      marginHorizontal:10,
+      marginHorizontal: 16,
       marginBottom: 12,
       shadowColor: theme === "dark" ? "#000" : colors.primary,
       shadowOffset: { width: 0, height: 2 },
@@ -273,7 +519,7 @@ export default function OrderHistoryScreen() {
       padding: 16,
       backgroundColor: colors.error + "20",
       borderRadius: 8,
-      marginBottom: 16,
+      margin: 16,
     },
     errorText: {
       color: colors.error,
@@ -302,7 +548,7 @@ export default function OrderHistoryScreen() {
     },
   });
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -315,19 +561,26 @@ export default function OrderHistoryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <View style={styles.headerContainer}>
+        <Text style={styles.headerTitle}>Riwayat Pesanan</Text>
+        <Text style={styles.headerSubtitle}>
+          Lihat dan kelola semua pesanan yang telah dibuat
+        </Text>
+      </View>
+
+      {/* Filter Section */}
+      {renderMonthPicker()}
+      
+      {/* Statistics Cards */}
+      {renderStatCards()}
+
+      {/* Order List */}
+      <View style={styles.listContainer}>
         {error && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>Error: {error}</Text>
           </View>
         )}
-
-        <View style={styles.headerContainer}>
-          <Text style={styles.headerTitle}>Riwayat Pesanan</Text>
-          <Text style={styles.headerSubtitle}>
-            Lihat dan kelola semua pesanan yang telah dibuat
-          </Text>
-        </View>
 
         <FlatList
           data={orders}
@@ -344,14 +597,14 @@ export default function OrderHistoryScreen() {
           }
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
-          extraData={orders.length} // Re-render when orders length changes
+          extraData={orders.length} 
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           ListFooterComponent={renderFooter}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Feather name="inbox" size={48} color={colors.textSecondary} />
               <Text style={styles.emptyText}>
-                Belum ada pesanan yang dibuat
+                Tidak ada pesanan untuk periode ini
               </Text>
             </View>
           }

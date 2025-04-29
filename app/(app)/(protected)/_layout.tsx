@@ -1,4 +1,3 @@
-// ProtectedLayout.tsx
 import React, { useEffect, useState } from "react";
 import { View, StyleSheet, Dimensions } from "react-native";
 import { Slot } from "expo-router";

@@ -39,7 +39,6 @@ const isTablet = SCREEN_WIDTH > 600;
     try {
       setLoading(true);
   
-      // Fetch order details
       const { data: orderData, error: orderError } = await supabase
         .from("orders")
         .select(`
@@ -53,7 +52,6 @@ const isTablet = SCREEN_WIDTH > 600;
   
       if (orderError) throw orderError;
   
-      // Fetch user profile if user_id exists
       let userData = null;
       if (orderData.user_id) {
         const { data: profileData, error: profileError } = await supabase
@@ -76,7 +74,6 @@ const isTablet = SCREEN_WIDTH > 600;
         }
       }
   
-      // Fetch order items
       const { data: itemsData, error: itemsError } = await supabase
         .from("order_items")
         .select("*")
@@ -88,7 +85,6 @@ const isTablet = SCREEN_WIDTH > 600;
       for (const item of itemsData || []) {
         let menuData = null;
         if (item.menu_id) {
-          // Improved menu data fetching with proper join to category table
           const { data: menu, error: menuError } = await supabase
             .from("menu")
             .select(`
@@ -191,7 +187,6 @@ ${itemsList}`;
   };
 
   const handlePrintReceipt = () => {
-    // Implementation for printing receipt would go here
     Alert.alert(
       "Informasi",
       "Fitur cetak struk akan segera tersedia",
@@ -495,7 +490,7 @@ ${itemsList}`;
                     </Text>
                     {item.menu?.category && (
                       <Text style={styles.itemCategory}>
-                        {item.menu.category.name_category}
+                        {capitalizeText(item.menu.category.name_category)}
                       </Text>
                     )}
                     <Text style={styles.itemPrice}>{formatCurrency(item.price)}</Text>
