@@ -17,6 +17,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { OrderDetail, OrderItem } from "@/utils/types";
 import { capitalizeText, formatCurrency } from "@/utils/format";
 import { SafeAreaView } from "react-native-safe-area-context";
+import RNPrint from 'react-native-print';
 
 export default function OrderDetailsScreen() {
   const { colors, theme } = useTheme();
@@ -186,12 +187,28 @@ ${itemsList}`;
     }
   };
 
-  const handlePrintReceipt = () => {
-    Alert.alert(
-      "Informasi",
-      "Fitur cetak struk akan segera tersedia",
-      [{ text: "OK" }]
-    );
+  const handlePrintReceipt = async () => {
+    if (!order) return;
+    const itemsList = orderItems
+      .map((item) => `- ${item.menu?.name_menu || "Item"} (${item.quantity}x) ${formatCurrency(item.subtotal)}`)
+      .join("<br/>");
+
+    const htmlContent = `
+      <h2>Struk Pesanan</h2>
+      <p>Invoice: ${order.invoice_number}</p>
+      <p>Tanggal: ${formatDate(order.created_at)}</p>
+      <p>Status: ${order.status}</p>
+      <p>Pembayaran: ${order.payment_type}</p>
+      <p>Total: ${formatCurrency(order.total_amount)}</p>
+      <h3>Item Pesanan:</h3>
+      <p>${itemsList}</p>
+    `;
+
+    try {
+      await RNPrint.print({ html: htmlContent });
+    } catch (e) {
+      Alert.alert('Error', 'Gagal mencetak struk');
+    }
   };
 
   const styles = StyleSheet.create({
