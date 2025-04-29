@@ -105,6 +105,7 @@ export default function AddUserScreen() {
       const { data, error } = await supabase.auth.admin.createUser({
         email: form.email.trim(),
         password: form.password.trim(),
+        email_confirm: true,
         user_metadata: {
           first_name: form.first_name.trim(),
           last_name: form.last_name.trim(),

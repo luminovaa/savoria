@@ -13,7 +13,7 @@ interface UserActionModalProps {
   onDelete: (user: UserList) => void;
 }
 
-export function UserActionModal({ visible, onClose, user, position, onDelete }: UserActionModalProps) {
+function UserActionModal({ visible, onClose, user, position, onDelete }: UserActionModalProps) {
   const { colors } = useTheme();
   const router = useRouter();
 
@@ -108,3 +108,5 @@ export function UserActionModal({ visible, onClose, user, position, onDelete }: 
     </Modal>
   );
 }
+
+export default UserActionModal;

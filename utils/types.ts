@@ -54,6 +54,7 @@ export type  MenuItem = {
   created_at: string;
   updated_at: string;
   isAddButton?: boolean;
+  category?: Category
 }
 
 export type Category = {
@@ -61,4 +62,41 @@ export type Category = {
     name_category: string;
     created_at: string;
     updated_at: string;
+  };
+
+  export type Order = {
+    id: string;
+    created_at: string;
+    invoice_number: string;
+    total: number;
+    total_amount: number;
+    payment_type: string;
+    status: string;
+    user_id: string;
+  };
+
+  export type OrderDetail = {
+    id: string;
+    created_at: string;
+    invoice_number: string;
+    total: number;
+    total_amount: number;
+    payment_type: string;
+    status: string;
+    user_id: string;
+    user?: {
+      email: string;
+      first_name: string;
+      last_name: string;
+    };
+  };
+  
+  export type OrderItem = {
+    id: string;
+    order_id: string;
+    menu_id: string;
+    quantity: number;
+    subtotal: number;
+    price: number;
+    menu?: MenuItem
   };

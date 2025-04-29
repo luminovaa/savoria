@@ -20,7 +20,7 @@ import { supabase } from "@/utils/supabase";
 import { MenuItem } from "@/utils/types";
 import { formatCurrency } from "@/utils/format";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MenuActionModal } from "./_component/modal-archive";
+import  MenuActionModal  from "./_component/modal-archive";
 
 type MainCardMenuProps = {
   selectedCategory: number | null;

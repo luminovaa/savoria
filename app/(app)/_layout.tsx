@@ -13,7 +13,6 @@ export default function AppLayout() {
       <Stack.Screen name="(protected)" />
       <Stack.Screen name="welcome" />
       <Stack.Screen name="sign-in" />
-      <Stack.Screen name="sign-up" />
     </Stack>
   );
 }

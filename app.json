@@ -3,11 +3,16 @@
     "name": "savoria",
     "slug": "savoria",
     "version": "1.0.0",
-    "orientation": "potrait",
-    "icon": "./assets/images/icon.png",
+    "screenOrientation": "unspecified",
+    "icon": "./assets/logo/savoria-dark.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/logo/savoria-dark.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
       "supportsTablet": true
     },

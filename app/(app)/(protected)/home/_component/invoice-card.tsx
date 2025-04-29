@@ -141,16 +141,29 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const handleOrder = async () => {
     try {
       const total = calculateTotal();
-
+  
       // Fetch the current user's ID from Supabase auth
       const {
         data: { user },
         error: authError,
       } = await supabase.auth.getUser();
       if (authError || !user) throw new Error("No user is logged in");
-
-      const userId = user.id;
-
+  
+      const authUserId = user.id;
+  
+      // Fetch the corresponding profiles.id based on auth.users.id
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", authUserId) // Assuming profiles.id maps to auth.users.id
+        .single();
+  
+      if (profileError || !profileData) {
+        throw new Error("Profile not found for this user");
+      }
+  
+      const profileId = profileData.id;
+  
       // Use the already generated unique invoice number
       const { data: orderData, error: orderError } = await supabase
         .from("orders")
@@ -159,17 +172,17 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
           invoice_number: invoiceNumber,
           total: Object.values(cart).reduce((sum, qty) => sum + qty, 0),
           total_amount: total,
-          user_id: userId,
+          user_id: profileId, // Use profiles.id instead of auth.users.id
           payment_type: "cash",
           status: "completed",
         })
         .select("id")
         .single();
-
+  
       if (orderError) throw orderError;
-
+  
       const orderId = orderData.id;
-
+  
       const orderItems = menuItems.map((item) => ({
         created_at: new Date().toISOString(),
         quantity: cart[item.id.toString()],
@@ -178,13 +191,13 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
         order_id: orderId,
         price: item.promo && item.promo_price ? item.promo_price : item.price,
       }));
-
+  
       const { error: itemsError } = await supabase
         .from("order_items")
         .insert(orderItems);
-
+  
       if (itemsError) throw itemsError;
-
+  
       // Generate a new invoice number for the next order
       await generateUniqueInvoiceNumber();
       setCart({});

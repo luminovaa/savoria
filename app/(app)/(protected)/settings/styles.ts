@@ -16,7 +16,7 @@ export type Colors = {
 // Define Theme as a string literal type to match what's coming from useTheme hook
 export type Theme = "light" | "dark";
 
-export const createStyles = (colors: Colors, theme: Theme, insets: EdgeInsets) => {
+const createStyles = (colors: Colors, theme: Theme, insets: EdgeInsets) => {
   return StyleSheet.create({
     container: {
       flex: 1,
@@ -220,3 +220,5 @@ export const createStyles = (colors: Colors, theme: Theme, insets: EdgeInsets) =
     },
   });
 };
+
+export default createStyles;

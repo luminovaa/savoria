@@ -3,7 +3,6 @@ import { useForm } from "react-hook-form";
 import {
   ActivityIndicator,
   View,
-  SafeAreaView,
   TextInput,
   TouchableOpacity,
   Text,
@@ -20,6 +19,7 @@ import React from "react";
 import { useTheme } from "@/hooks/use-theme";
 import { Ionicons } from "@expo/vector-icons";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const formSchema = z.object({
   email: z.string().email("Masukkan Email Yang Valid."),

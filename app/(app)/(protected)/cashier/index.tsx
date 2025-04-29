@@ -16,7 +16,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { ProfileWithRole, UserList } from "@/utils/types";
 import { capitalizeText } from "@/utils/format";
-import { UserActionModal } from "./_components/modal-user";
+import  UserActionModal  from "./_components/modal-user";
 
 export default function UsersListScreen() {
   const { colors, theme } = useTheme();

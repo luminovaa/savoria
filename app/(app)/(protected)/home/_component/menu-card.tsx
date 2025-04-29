@@ -17,11 +17,10 @@ import { supabase } from "@/utils/supabase";
 import { MenuItem } from "@/utils/types";
 import { formatCurrency } from "@/utils/format";
 import { Feather } from "@expo/vector-icons";
-import { MenuActionModal } from "./modal-menu";
-
+import MenuActionModal from "./modal-menu";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
-const isTablet = SCREEN_WIDTH > 600; 
+const isTablet = SCREEN_WIDTH > 600;
 type MainCardMenuProps = {
   selectedCategory: number | null;
   cart: { [id: string]: number };
@@ -39,7 +38,10 @@ export default function MainCardMenu({
   const router = useRouter();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
-  const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
+  const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(
+    null
+  );
+  const [isAdding, setIsAdding] = useState<string | null>(null); 
 
   const fetchMenuItems = async () => {
     try {
@@ -47,8 +49,8 @@ export default function MainCardMenu({
       let query = supabase
         .from("menu")
         .select("*")
-        .eq("is_deleted", false) 
-        .eq("is_archive", false); 
+        .eq("is_deleted", false)
+        .eq("is_archive", false);
 
       if (selectedCategory) {
         query = query.eq("category_id", selectedCategory);
@@ -60,11 +62,11 @@ export default function MainCardMenu({
 
       if (error) throw error;
 
-      // Get current date in WIB (UTC+7)
       const currentDate = new Date();
-      const wibOffset = 7 * 60; // WIB is UTC+7, in minutes
+      const wibOffset = 7 * 60;
       const wibDate = new Date(
-        currentDate.getTime() + (wibOffset - currentDate.getTimezoneOffset()) * 60 * 1000
+        currentDate.getTime() +
+          (wibOffset - currentDate.getTimezoneOffset()) * 60 * 1000
       );
 
       const normalizeDate = (date: Date) => {
@@ -80,7 +82,10 @@ export default function MainCardMenu({
         const promoEnd = normalizeDate(new Date(item.promo_end));
         const normalizedCurrentDate = normalizeDate(wibDate);
 
-        return normalizedCurrentDate >= promoStart && normalizedCurrentDate <= promoEnd;
+        return (
+          normalizedCurrentDate >= promoStart &&
+          normalizedCurrentDate <= promoEnd
+        );
       });
 
       setMenuItems([
@@ -126,12 +131,18 @@ export default function MainCardMenu({
   };
 
   const addToCart = (id: string) => {
+    if (isAdding) return;
+
+    setIsAdding(id);
     setCart((prevCart) => ({
       ...prevCart,
       [id]: (prevCart[id] || 0) + 1,
     }));
-  };
 
+    setTimeout(() => {
+      setIsAdding(null);
+    }, 300);
+  };
   const handleAddMenu = () => {
     router.push("/(app)/(protected)/home/add-menu");
   };
@@ -142,19 +153,22 @@ export default function MainCardMenu({
   ) => {
     if (item.id === 0) return; // Don't show modal for "Tambah Menu" button
     setSelectedMenuItem(item);
-    setModalPosition({ x: event.nativeEvent.pageX, y: event.nativeEvent.pageY });
+    setModalPosition({
+      x: event.nativeEvent.pageX,
+      y: event.nativeEvent.pageY,
+    });
     setModalVisible(true);
   };
 
   const confirmDeleteMenuItem = (item: MenuItem) => {
     Alert.alert(
-      'Konfirmasi Hapus',
+      "Konfirmasi Hapus",
       `Apakah Anda yakin ingin menghapus menu ${item.name_menu}?`,
       [
-        { text: 'Batal', style: 'cancel' },
+        { text: "Batal", style: "cancel" },
         {
-          text: 'Hapus',
-          style: 'destructive',
+          text: "Hapus",
+          style: "destructive",
           onPress: () => softDeleteMenuItem(item.id),
         },
       ],
@@ -172,9 +186,9 @@ export default function MainCardMenu({
       if (error) throw error;
 
       setMenuItems(menuItems.filter((item) => item.id !== menuId));
-      Alert.alert('Sukses', 'Menu berhasil dihapus');
+      Alert.alert("Sukses", "Menu berhasil dihapus");
     } catch (error: any) {
-      Alert.alert('Error', 'Gagal menghapus menu: ' + error.message);
+      Alert.alert("Error", "Gagal menghapus menu: " + error.message);
     }
   };
 
@@ -188,9 +202,9 @@ export default function MainCardMenu({
       if (error) throw error;
 
       setMenuItems(menuItems.filter((menu) => menu.id !== item.id));
-      Alert.alert('Sukses', 'Menu berhasil diarsipkan');
+      Alert.alert("Sukses", "Menu berhasil diarsipkan");
     } catch (error: any) {
-      Alert.alert('Error', 'Gagal mengarsipkan menu: ' + error.message);
+      Alert.alert("Error", "Gagal mengarsipkan menu: " + error.message);
     }
   };
 
@@ -271,7 +285,7 @@ export default function MainCardMenu({
       color: colors.text,
     },
     name: {
-      fontSize: 14,
+      fontSize: isTablet? 14 : 16,
       fontWeight: "600",
       marginBottom: 4,
       color: colors.text,
@@ -280,7 +294,7 @@ export default function MainCardMenu({
       marginBottom: 8,
     },
     price: {
-      fontSize: 13,
+      fontSize: 14,
       color: colors.primary,
       fontWeight: "600",
     },
@@ -402,39 +416,30 @@ export default function MainCardMenu({
           </View>
 
           {quantity > 0 ? (
-            <View style={styles.quantityContainer}>
-              <TouchableOpacity
-                onPress={() => updateQuantity(item.id.toString(), -1)}
-                style={styles.quantityButton}
-              >
-                <Feather
-                  name="minus"
-                  width={18}
-                  height={18}
-                  color={colors.primary}
-                />
-              </TouchableOpacity>
-              <Text style={styles.quantity}>{quantity}</Text>
-              <TouchableOpacity
-                onPress={() => updateQuantity(item.id.toString(), 1)}
-                style={styles.quantityButton}
-              >
-                <Feather
-                  name="plus"
-                  width={18}
-                  height={18}
-                  color={colors.primary}
-                />
-              </TouchableOpacity>
-            </View>
-          ) : (
+          <View style={styles.quantityContainer}>
             <TouchableOpacity
-              onPress={() => addToCart(item.id.toString())}
-              style={styles.addButton}
+              onPress={() => updateQuantity(item.id.toString(), -1)}
+              style={styles.quantityButton}
             >
-              <Text style={styles.addButtonText}>Tambah</Text>
+              <Feather name="minus" width={18} height={18} color={colors.primary} />
             </TouchableOpacity>
-          )}
+            <Text style={styles.quantity}>{quantity}</Text>
+            <TouchableOpacity
+              onPress={() => updateQuantity(item.id.toString(), 1)}
+              style={styles.quantityButton}
+            >
+              <Feather name="plus" width={18} height={18} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            onPress={() => addToCart(item.id.toString())}
+            style={[styles.addButton, isAdding === item.id.toString() && { opacity: 0.5 }]}
+            disabled={isAdding === item.id.toString()}
+          >
+            <Text style={styles.addButtonText}>Tambah</Text>
+          </TouchableOpacity>
+        )}
         </View>
       </TouchableOpacity>
     );
@@ -470,5 +475,4 @@ export default function MainCardMenu({
       />
     </View>
   );
-
 }

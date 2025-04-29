@@ -14,7 +14,7 @@ interface MenuActionModalProps {
   onArchive?: (menu: MenuItem) => void; // New archive callback
 }
 
-export function MenuActionModal({ 
+export default function MenuActionModal({ 
   visible, 
   onClose, 
   menu, 

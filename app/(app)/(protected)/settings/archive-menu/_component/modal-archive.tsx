@@ -12,7 +12,7 @@ interface MenuActionModalProps {
   onUnarchive: (menu: MenuItem) => void;
 }
 
-export function MenuActionModal({ 
+export default function MenuActionModal({ 
   visible, 
   onClose, 
   menu, 

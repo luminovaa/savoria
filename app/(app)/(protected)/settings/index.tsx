@@ -4,7 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { useTheme } from "@/hooks/use-theme";
 import { useSupabase } from "@/context/supabase-provider";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { createStyles, Theme } from "./styles";
+import createStyles, { Theme } from "./styles";
 import ProfileSection from "./_component/profile";
 import SettingItem from "./_component/setting-item";
 import SectionHeader from "./_component/section";
@@ -13,7 +13,6 @@ import { useRouter } from "expo-router";
 import { Linking } from "react-native";
 
 export default function SettingScreen() {
-  // Explicitly type theme as Theme type
   const { theme, toggleTheme, colors } = useTheme() as {
     theme: Theme;
     toggleTheme: () => void;
@@ -24,7 +23,6 @@ export default function SettingScreen() {
   const styles = createStyles(colors, theme, insets);
   const router = useRouter();
 
-  // User data preparation
   const userData = {
     name: user?.email ? user.email.split("@")[0] : "User",
     email: user?.email || "user@example.com",

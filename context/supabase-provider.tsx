@@ -1,3 +1,4 @@
+import SplashScreenComponent from "@/app/(app)/welcome";
 import { supabase } from "@/utils/supabase";
 import { Session, User } from "@supabase/supabase-js";
 import { useRouter, useSegments, SplashScreen } from "expo-router";
@@ -109,7 +110,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
     if (session && !inProtectedGroup) {
       router.replace("/(app)/(protected)/home");
     } else if (!session) {
-      router.replace("/(app)/sign-in");
+      router.replace("/(app)/welcome");
     }
   }, [initialized, appIsReady, session]);
 
@@ -120,7 +121,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
   }, [appIsReady]);
 
   if (!initialized || !appIsReady) {
-    return null;
+    return <SplashScreenComponent />;
   }
 
   return (
