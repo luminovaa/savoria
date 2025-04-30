@@ -9,6 +9,10 @@ import {
   TouchableOpacity,
   Share,
   Dimensions,
+  Modal,
+  FlatList,
+  PermissionsAndroid,
+  Platform,
 } from "react-native";
 import { supabase } from "@/utils/supabase";
 import { useTheme } from "@/hooks/use-theme";
@@ -17,7 +21,12 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { OrderDetail, OrderItem } from "@/utils/types";
 import { capitalizeText, formatCurrency } from "@/utils/format";
 import { SafeAreaView } from "react-native-safe-area-context";
-import RNPrint from 'react-native-print';
+import { BLEPrinter } from "react-native-thermal-receipt-printer";
+
+interface BluetoothDevice {
+  inner_mac_address: string;
+  device_name: string;
+}
 
 export default function OrderDetailsScreen() {
   const { colors, theme } = useTheme();
@@ -27,19 +36,28 @@ export default function OrderDetailsScreen() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [bluetoothDevices, setBluetoothDevices] = useState<BluetoothDevice[]>([]);
+  const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
-const isTablet = SCREEN_WIDTH > 600;
+  const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+  const isTablet = SCREEN_WIDTH > 600;
+
   useEffect(() => {
     if (id) {
       fetchOrderDetails(id as string);
     }
+    return () => {
+      // Cleanup: Close printer connection on component unmount
+      BLEPrinter.closeConn().catch((err) => console.error("Close connection error:", err));
+    };
   }, [id]);
 
   const fetchOrderDetails = async (orderId: string) => {
     try {
       setLoading(true);
-  
+
       const { data: orderData, error: orderError } = await supabase
         .from("orders")
         .select(`
@@ -50,9 +68,9 @@ const isTablet = SCREEN_WIDTH > 600;
         `)
         .eq("id", orderId)
         .single();
-  
+
       if (orderError) throw orderError;
-  
+
       let userData = null;
       if (orderData.user_id) {
         const { data: profileData, error: profileError } = await supabase
@@ -64,7 +82,7 @@ const isTablet = SCREEN_WIDTH > 600;
           `)
           .eq("id", orderData.user_id)
           .single();
-  
+
         if (profileError) {
           console.error("Error fetching profile:", profileError);
         } else {
@@ -74,14 +92,14 @@ const isTablet = SCREEN_WIDTH > 600;
           };
         }
       }
-  
+
       const { data: itemsData, error: itemsError } = await supabase
         .from("order_items")
         .select("*")
         .eq("order_id", orderId);
-  
+
       if (itemsError) throw itemsError;
-  
+
       const enhancedItemsData = [];
       for (const item of itemsData || []) {
         let menuData = null;
@@ -101,25 +119,25 @@ const isTablet = SCREEN_WIDTH > 600;
             `)
             .eq("id", item.menu_id)
             .single();
-          
+
           if (!menuError && menu) {
             menuData = menu;
           } else {
             console.error("Error fetching menu item:", menuError);
           }
         }
-  
+
         enhancedItemsData.push({
           ...item,
           menu: menuData,
         });
       }
-  
+
       const transformedOrder = {
         ...orderData,
         user: userData,
       };
-  
+
       setOrder(transformedOrder as OrderDetail);
       setOrderItems(enhancedItemsData as OrderItem[]);
     } catch (error: any) {
@@ -130,15 +148,107 @@ const isTablet = SCREEN_WIDTH > 600;
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case "completed":
-        return colors.success;
-      case "cancelled":
-        return colors.error;
-      default:
-        return colors.textSecondary;
+  const requestBluetoothPermission = async () => {
+    console.log("Checking platform:", Platform.OS);
+    if (Platform.OS === "android") {
+      try {
+        const permissions = [
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADMIN,
+        ];
+        console.log("Requesting permissions:", permissions);
+        const granted = await PermissionsAndroid.requestMultiple(permissions);
+        console.log("Permission results:", granted);
+  
+        const allGranted = Object.values(granted).every(
+          (status) => status === PermissionsAndroid.RESULTS.GRANTED
+        );
+        console.log("All permissions granted:", allGranted);
+        return allGranted;
+      } catch (err) {
+        console.error("Permission error:", err);
+        return false;
+      }
     }
+    console.log("Skipping permission request for non-Android platform");
+    return true;
+  };
+
+  const scanBluetoothDevices = async () => {
+    console.log("Starting scanBluetoothDevices");
+    try {
+      const hasPermission = await requestBluetoothPermission();
+      console.log("Has permission:", hasPermission);
+      if (!hasPermission) {
+        Alert.alert("Error", "Izin Bluetooth tidak diberikan");
+        return;
+      }
+  
+      setPrinting(true);
+      console.log("Initializing BLEPrinter...");
+      await BLEPrinter.init();
+      console.log("Scanning for devices...");
+      const devices = await BLEPrinter.getDeviceList();
+      console.log("Devices found:", devices);
+      setBluetoothDevices(devices);
+      setModalVisible(true);
+      console.log("Modal should be visible");
+    } catch (error) {
+      console.error("Scan error:", error);
+      Alert.alert("Error", `Gagal memindai perangkat Bluetooth: ${error}`);
+    } finally {
+      setPrinting(false);
+      console.log("Scan completed, printing:", false);
+    }
+  };
+
+  const connectAndPrint = async (inner_mac_address: string) => {
+    try {
+      setPrinting(true);
+      await BLEPrinter.connectPrinter(inner_mac_address);
+      await printReceipt();
+      setModalVisible(false);
+      Alert.alert("Success", "Struk berhasil dicetak");
+    } catch (error) {
+      console.error("Print error:", error);
+      Alert.alert("Error", "Gagal mencetak struk");
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const printReceipt = async () => {
+    if (!order) return;
+
+    const itemsText = orderItems
+      .map(
+        (item) =>
+          `[L]${item.menu?.name_menu || "Item"}[R]${item.quantity}x ${formatCurrency(
+            item.subtotal
+          )}\n`
+      )
+      .join("");
+
+    const receiptText = `
+[C]================================
+[C]        TOKO ANDA
+[C]================================
+[L]Invoice: ${order.invoice_number}
+[L]Tanggal: ${formatDate(order.created_at)}
+[L]Kasir  : ${order.user?.first_name || "-"}
+[C]--------------------------------
+${itemsText}
+[C]--------------------------------
+[R]TOTAL: ${formatCurrency(order.total_amount)}
+[C]================================
+[C]Terima kasih
+[C]
+[C]
+`;
+
+    await BLEPrinter.printText(receiptText, { cut: true });
   };
 
   const formatDate = (dateString: string) => {
@@ -152,6 +262,17 @@ const isTablet = SCREEN_WIDTH > 600;
     });
   };
 
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case "completed":
+        return colors.success;
+      case "cancelled":
+        return colors.error;
+      default:
+        return colors.textSecondary;
+    }
+  };
+
   const handleBackPress = () => {
     router.back();
   };
@@ -161,11 +282,12 @@ const isTablet = SCREEN_WIDTH > 600;
 
     try {
       const itemsList = orderItems
-        .map((item) => {
-          return `- ${item.menu?.name_menu || "Item"} (${item.quantity}x) ${formatCurrency(
-            item.subtotal
-          )}`;
-        })
+        .map(
+          (item) =>
+            `- ${item.menu?.name_menu || "Item"} (${item.quantity}x) ${formatCurrency(
+              item.subtotal
+            )}`
+        )
         .join("\n");
 
       const message = `Detail Pesanan
@@ -187,28 +309,8 @@ ${itemsList}`;
     }
   };
 
-  const handlePrintReceipt = async () => {
-    if (!order) return;
-    const itemsList = orderItems
-      .map((item) => `- ${item.menu?.name_menu || "Item"} (${item.quantity}x) ${formatCurrency(item.subtotal)}`)
-      .join("<br/>");
-
-    const htmlContent = `
-      <h2>Struk Pesanan</h2>
-      <p>Invoice: ${order.invoice_number}</p>
-      <p>Tanggal: ${formatDate(order.created_at)}</p>
-      <p>Status: ${order.status}</p>
-      <p>Pembayaran: ${order.payment_type}</p>
-      <p>Total: ${formatCurrency(order.total_amount)}</p>
-      <h3>Item Pesanan:</h3>
-      <p>${itemsList}</p>
-    `;
-
-    try {
-      await RNPrint.print({ html: htmlContent });
-    } catch (e) {
-      Alert.alert('Error', 'Gagal mencetak struk');
-    }
+  const handlePrintReceipt = () => {
+    scanBluetoothDevices();
   };
 
   const styles = StyleSheet.create({
@@ -398,6 +500,45 @@ ${itemsList}`;
       color: colors.error,
       textAlign: "center",
     },
+    modalContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+    },
+    modalContent: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      padding: 20,
+      width: isTablet ? "60%" : "90%",
+      maxHeight: SCREEN_HEIGHT * 0.7,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.text,
+      marginBottom: 16,
+    },
+    deviceItem: {
+      padding: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    deviceText: {
+      fontSize: 16,
+      color: colors.text,
+      flex: 1,
+    },
+    selectedDevice: {
+      backgroundColor: colors.primary + "20",
+    },
+    modalActions: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 20,
+    },
   });
 
   if (loading) {
@@ -434,9 +575,7 @@ ${itemsList}`;
         </View>
         <View style={styles.content}>
           <View style={[styles.errorContainer]}>
-            <Text style={[styles.errorText]}>
-              Pesanan tidak ditemukan
-            </Text>
+            <Text style={[styles.errorText]}>Pesanan tidak ditemukan</Text>
           </View>
         </View>
       </SafeAreaView>
@@ -557,11 +696,77 @@ ${itemsList}`;
           <Feather name="arrow-left" size={18} color={colors.text} />
           <Text style={[styles.actionButtonText, styles.secondaryButtonText]}>Kembali</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton} onPress={handlePrintReceipt}>
-          <Feather name="printer" size={18} color="#FFFFFF" />
-          <Text style={styles.actionButtonText}>Cetak Struk</Text>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={handlePrintReceipt}
+          disabled={printing}
+        >
+          {printing ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Feather name="printer" size={18} color="#FFFFFF" />
+              <Text style={styles.actionButtonText}>Cetak Struk</Text>
+            </>
+          )}
         </TouchableOpacity>
       </View>
+
+      {/* Bluetooth Picker Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Pilih Printer Bluetooth</Text>
+            {bluetoothDevices.length > 0 ? (
+              <FlatList
+                data={bluetoothDevices}
+                keyExtractor={(item) => item.inner_mac_address}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.deviceItem,
+                      selectedDevice === item.inner_mac_address && styles.selectedDevice,
+                    ]}
+                    onPress={() => setSelectedDevice(item.inner_mac_address)}
+                  >
+                    <Text style={styles.deviceText}>
+                      {item.device_name || item.inner_mac_address}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              />
+            ) : (
+              <Text style={styles.deviceText}>Tidak ada printer terdeteksi</Text>
+            )}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.secondaryButton]}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={[styles.actionButtonText, styles.secondaryButtonText]}>
+                  Batal
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, (!selectedDevice || printing) && { opacity: 0.5 }]}
+                onPress={() => selectedDevice && connectAndPrint(selectedDevice)}
+                disabled={!selectedDevice || printing}
+              >
+                {printing ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.actionButtonText}>Cetak</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
