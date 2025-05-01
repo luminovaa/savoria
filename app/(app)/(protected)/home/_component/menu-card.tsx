@@ -18,6 +18,7 @@ import { MenuItem } from "@/utils/types";
 import { formatCurrency } from "@/utils/format";
 import { Feather } from "@expo/vector-icons";
 import MenuActionModal from "./modal-menu";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const isTablet = SCREEN_WIDTH > 600;
@@ -454,7 +455,7 @@ export default function MainCardMenu({
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <FlatList
         data={menuItems}
         renderItem={renderItem}
@@ -473,6 +474,6 @@ export default function MainCardMenu({
         onDelete={confirmDeleteMenuItem}
         onArchive={archiveMenuItem}
       />
-    </View>
+    </SafeAreaView>
   );
 }

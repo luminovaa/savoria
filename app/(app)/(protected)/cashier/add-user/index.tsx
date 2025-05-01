@@ -224,7 +224,7 @@ export default function AddUserScreen() {
       elevation: 3,
     },
     saveButtonText: {
-      color: "#fff",
+      color: colors.buttonText,
       fontSize: 16,
       fontWeight: "600",
     },

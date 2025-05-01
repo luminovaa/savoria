@@ -205,7 +205,7 @@ export default function ShopSettingScreen() {
       elevation: 3,
     },
     saveButtonText: {
-      color: "#fff",
+      color: colors.buttonText,
       fontSize: 16,
       fontWeight: "600",
     },

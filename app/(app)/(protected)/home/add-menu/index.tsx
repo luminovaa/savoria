@@ -8,21 +8,25 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   Image,
   Platform,
   Dimensions,
+  Linking,
 } from "react-native";
 import { supabase } from "@/utils/supabase";
 import { useTheme } from "@/hooks/use-theme";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { z } from "zod";
-import * as ImagePicker from 'expo-image-picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import * as ImagePicker from "expo-image-picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import CategoryModal from "./_component/category-modal";
 import { capitalizeText, formatCurrency, parseCurrency } from "@/utils/format";
-import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
+import {
+  widthPercentageToDP as wp,
+  heightPercentageToDP as hp,
+} from "react-native-responsive-screen";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const menuFormSchema = z.object({
   name_menu: z.string().min(1, "Nama menu wajib diisi"),
@@ -60,26 +64,31 @@ export default function AddMenuScreen() {
   const [image, setImage] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(
+    null
+  );
   const [isTablet, setIsTablet] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState({ start: false, end: false });
+  const [showDatePicker, setShowDatePicker] = useState({
+    start: false,
+    end: false,
+  });
   const [tempDate, setTempDate] = useState(new Date());
 
   useEffect(() => {
     initializeCategories();
     checkIfTablet();
-    
-    const subscription = Dimensions.addEventListener('change', () => {
+
+    const subscription = Dimensions.addEventListener("change", () => {
       checkIfTablet();
     });
-    
+
     return () => {
       subscription.remove();
     };
   }, []);
 
   const checkIfTablet = () => {
-    const { width, height } = Dimensions.get('window');
+    const { width, height } = Dimensions.get("window");
     const screenWidth = Math.min(width, height);
     setIsTablet(screenWidth >= 768);
   };
@@ -87,39 +96,50 @@ export default function AddMenuScreen() {
   async function initializeCategories() {
     try {
       const { data, error } = await supabase
-        .from('category')
-        .select('id, name_category')
-        .order('name_category');
-      
+        .from("category")
+        .select("id, name_category")
+        .order("name_category");
+
       if (error) throw error;
-      
+
       setCategories(data || []);
-      
+
       if (form.category_id && data) {
-        const selected = data.find(cat => cat.id === form.category_id);
+        const selected = data.find((cat) => cat.id === form.category_id);
         if (selected) {
           setSelectedCategory(selected);
         }
       }
     } catch (error: any) {
-      Alert.alert('Error', 'Gagal memuat kategori: ' + error.message);
+      Alert.alert("Error", "Gagal memuat kategori: " + error.message);
     }
   }
+  // const requestManageStorage = async () => {
+  //   if (Platform.OS === 'android' && Platform.Version >= 30) {
+  //     await Linking.openSettings();
+  //   }
+  // };
 
   const pickImage = async () => {
     try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission denied", "Please allow access to photos.");
+        return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
       });
-
+  
       if (!result.canceled) {
         setImage(result.assets[0].uri);
       }
     } catch (error) {
-      Alert.alert('Error', 'Gagal memilih gambar');
+      Alert.alert("Error", "Gagal memilih gambar" + error);
+      console.error(error);
     }
   };
 
@@ -127,37 +147,39 @@ export default function AddMenuScreen() {
     try {
       const response = await fetch(uri);
       const arraybuffer = await response.arrayBuffer();
-      
+
       if (arraybuffer.byteLength > 5 * 1024 * 1024) {
-        throw new Error('Ukuran file terlalu besar. Maksimal 5MB');
+        throw new Error("Ukuran file terlalu besar. Maksimal 5MB");
       }
-  
-      const fileType = uri.split('.').pop()?.toLowerCase() ?? 'jpeg';
-      if (!['jpeg', 'png', 'jpg'].includes(fileType)) {
-        throw new Error('Tipe file tidak didukung. Gunakan JPEG, PNG, atau JPG');
+
+      const fileType = uri.split(".").pop()?.toLowerCase() ?? "jpeg";
+      if (!["jpeg", "png", "jpg"].includes(fileType)) {
+        throw new Error(
+          "Tipe file tidak didukung. Gunakan JPEG, PNG, atau JPG"
+        );
       }
-  
+
       const fileName = `menu-${Date.now()}.${fileType}`;
-      
+
       const { data, error } = await supabase.storage
-        .from('file')
+        .from("file")
         .upload(fileName, arraybuffer, {
           contentType: `image/${fileType}`,
-          cacheControl: '3600',
-          upsert: false
+          cacheControl: "3600",
+          upsert: false,
         });
-  
+
       if (error) {
-        throw new Error('Gagal mengupload gambar: ' + error.message);
+        throw new Error("Gagal mengupload gambar: " + error.message);
       }
-  
-      const { data: { publicUrl } } = supabase.storage
-        .from('file')
-        .getPublicUrl(fileName);
-  
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("file").getPublicUrl(fileName);
+
       return publicUrl;
     } catch (error: any) {
-      throw new Error('Gagal mengupload gambar: ' + error.message);
+      throw new Error("Gagal mengupload gambar: " + error.message);
     }
   };
 
@@ -239,27 +261,34 @@ export default function AddMenuScreen() {
   };
 
   const formatDateForDisplay = (dateString: string): string => {
-    if (!dateString) return '';
+    if (!dateString) return "";
     const date = new Date(dateString);
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, "0");
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
     const year = date.getFullYear();
     return `${day}-${month}-${year}`;
   };
 
   const formatDateForStorage = (date: Date): string => {
-    return date.toISOString().split('T')[0]; // Format to YYYY-MM-DD
+    return date.toISOString().split("T")[0]; // Format to YYYY-MM-DD
   };
 
   const parseDateFromDisplay = (displayDate: string): string => {
-    if (!displayDate) return '';
-    const [day, month, year] = displayDate.split('-');
+    if (!displayDate) return "";
+    const [day, month, year] = displayDate.split("-");
     return `${year}-${month}-${day}`; // Convert DD-MM-YYYY to YYYY-MM-DD
   };
 
-  const handleDateChange = (event: any, selectedDate: Date | undefined, field: 'promo_start' | 'promo_end') => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker({ ...showDatePicker, [field === 'promo_start' ? 'start' : 'end']: false });
+  const handleDateChange = (
+    event: any,
+    selectedDate: Date | undefined,
+    field: "promo_start" | "promo_end"
+  ) => {
+    if (Platform.OS === "android") {
+      setShowDatePicker({
+        ...showDatePicker,
+        [field === "promo_start" ? "start" : "end"]: false,
+      });
     }
     if (selectedDate) {
       handleInputChange(field, formatDateForStorage(selectedDate));
@@ -267,9 +296,16 @@ export default function AddMenuScreen() {
     }
   };
 
-  const showDatePickerModal = (field: 'promo_start' | 'promo_end') => {
-    setShowDatePicker({ ...showDatePicker, [field === 'promo_start' ? 'start' : 'end']: true });
-    setTempDate(form[field] ? new Date(parseDateFromDisplay(formatDateForDisplay(form[field]))) : new Date());
+  const showDatePickerModal = (field: "promo_start" | "promo_end") => {
+    setShowDatePicker({
+      ...showDatePicker,
+      [field === "promo_start" ? "start" : "end"]: true,
+    });
+    setTempDate(
+      form[field]
+        ? new Date(parseDateFromDisplay(formatDateForDisplay(form[field])))
+        : new Date()
+    );
   };
 
   const styles = StyleSheet.create({
@@ -280,14 +316,14 @@ export default function AddMenuScreen() {
     scrollContent: {
       flexGrow: 1,
       padding: 20,
-      alignItems: isTablet ? 'center' : 'stretch',
+      alignItems: isTablet ? "center" : "stretch",
     },
     header: {
       flexDirection: "row",
       alignItems: "center",
       marginBottom: 20,
-      width: isTablet ? wp('70%') : wp('100%') - 40,
-      alignSelf: isTablet ? 'center' : 'flex-start',
+      width: isTablet ? wp("70%") : wp("100%") - 40,
+      alignSelf: isTablet ? "center" : "flex-start",
     },
     backButton: {
       marginRight: 20,
@@ -298,8 +334,8 @@ export default function AddMenuScreen() {
       color: colors.text,
     },
     formContainer: {
-      width: isTablet ? wp('70%') : wp('100%') - 40,
-      alignSelf: 'center',
+      width: isTablet ? wp("70%") : wp("100%") - 40,
+      alignSelf: "center",
     },
     fieldContainer: {
       marginBottom: 20,
@@ -327,9 +363,9 @@ export default function AddMenuScreen() {
       fontSize: 16,
       color: colors.text,
       borderColor: colors.border,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
     },
     textArea: {
       height: 100,
@@ -351,7 +387,7 @@ export default function AddMenuScreen() {
       backgroundColor: colors.primary,
     },
     saveButtonText: {
-      color: "#ffffff",
+      color: colors.buttonText,
       fontSize: 16,
       fontWeight: "600",
     },
@@ -361,16 +397,16 @@ export default function AddMenuScreen() {
       marginBottom: 20,
       borderRadius: 8,
       overflow: "hidden",
-      alignSelf: 'center',
-      justifyContent: 'center',
-      alignItems: 'center',
+      alignSelf: "center",
+      justifyContent: "center",
+      alignItems: "center",
       backgroundColor: colors.background,
     },
     imagePreview: {
       width: 400,
       height: 400,
       resizeMode: "contain",
-      alignSelf: 'center',
+      alignSelf: "center",
     },
     imagePlaceholder: {
       width: 400,
@@ -383,7 +419,7 @@ export default function AddMenuScreen() {
       marginTop: 10,
       fontSize: 14,
       color: colors.textSecondary,
-      textAlign: 'center',
+      textAlign: "center",
     },
     categoryButton: {
       flexDirection: "row",
@@ -549,9 +585,11 @@ export default function AddMenuScreen() {
                     : styles.categoryPlaceholder
                 }
               >
-                {capitalizeText(selectedCategory
-                  ? selectedCategory.name_category
-                  : "Pilih kategori")}
+                {capitalizeText(
+                  selectedCategory
+                    ? selectedCategory.name_category
+                    : "Pilih kategori"
+                )}
               </Text>
               <Feather
                 name="chevron-down"
@@ -612,19 +650,33 @@ export default function AddMenuScreen() {
                   <Text style={styles.promoLabel}>Mulai Promo</Text>
                   <TouchableOpacity
                     style={styles.dateInput}
-                    onPress={() => showDatePickerModal('promo_start')}
+                    onPress={() => showDatePickerModal("promo_start")}
                   >
-                    <Text style={{ color: form.promo_start ? colors.text : colors.textSecondary }}>
-                      {form.promo_start ? formatDateForDisplay(form.promo_start) : 'Pilih tanggal mulai'}
+                    <Text
+                      style={{
+                        color: form.promo_start
+                          ? colors.text
+                          : colors.textSecondary,
+                      }}
+                    >
+                      {form.promo_start
+                        ? formatDateForDisplay(form.promo_start)
+                        : "Pilih tanggal mulai"}
                     </Text>
-                    <Feather name="calendar" size={20} color={colors.textSecondary} />
+                    <Feather
+                      name="calendar"
+                      size={20}
+                      color={colors.textSecondary}
+                    />
                   </TouchableOpacity>
                   {showDatePicker.start && (
                     <DateTimePicker
                       value={tempDate}
                       mode="date"
-                      display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                      onChange={(event, date) => handleDateChange(event, date, 'promo_start')}
+                      display={Platform.OS === "ios" ? "inline" : "default"}
+                      onChange={(event, date) =>
+                        handleDateChange(event, date, "promo_start")
+                      }
                     />
                   )}
                 </View>
@@ -633,19 +685,33 @@ export default function AddMenuScreen() {
                   <Text style={styles.promoLabel}>Akhir Promo</Text>
                   <TouchableOpacity
                     style={styles.dateInput}
-                    onPress={() => showDatePickerModal('promo_end')}
+                    onPress={() => showDatePickerModal("promo_end")}
                   >
-                    <Text style={{ color: form.promo_end ? colors.text : colors.textSecondary }}>
-                      {form.promo_end ? formatDateForDisplay(form.promo_end) : 'Pilih tanggal akhir'}
+                    <Text
+                      style={{
+                        color: form.promo_end
+                          ? colors.text
+                          : colors.textSecondary,
+                      }}
+                    >
+                      {form.promo_end
+                        ? formatDateForDisplay(form.promo_end)
+                        : "Pilih tanggal akhir"}
                     </Text>
-                    <Feather name="calendar" size={20} color={colors.textSecondary} />
+                    <Feather
+                      name="calendar"
+                      size={20}
+                      color={colors.textSecondary}
+                    />
                   </TouchableOpacity>
                   {showDatePicker.end && (
                     <DateTimePicker
                       value={tempDate}
                       mode="date"
-                      display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                      onChange={(event, date) => handleDateChange(event, date, 'promo_end')}
+                      display={Platform.OS === "ios" ? "inline" : "default"}
+                      onChange={(event, date) =>
+                        handleDateChange(event, date, "promo_end")
+                      }
                     />
                   )}
                 </View>

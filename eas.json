@@ -18,10 +18,11 @@
         "distribution": "internal"
       },
       "production": {
+        "environment": "production",
         "android": {
           "buildType": "apk",
           "gradleCommand": ":app:assembleDebug"
-        }
+        } 
       }
     }
   }

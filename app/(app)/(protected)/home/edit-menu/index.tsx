@@ -157,6 +157,12 @@ export default function EditMenuScreen() {
 
   const pickImage = async () => {
     try {
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission denied", "Please allow access to photos.");
+        return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -420,7 +426,7 @@ export default function EditMenuScreen() {
       backgroundColor: colors.primary,
     },
     saveButtonText: {
-      color: "#ffffff",
+      color: colors.buttonText,
       fontSize: 16,
       fontWeight: "600",
     },
@@ -633,9 +639,11 @@ export default function EditMenuScreen() {
                     : styles.categoryPlaceholder
                 }
               >
-                {capitalizeText(selectedCategory
-                  ? selectedCategory.name_category
-                  : "Pilih kategori")}
+                {capitalizeText(
+                  selectedCategory
+                    ? selectedCategory.name_category
+                    : "Pilih kategori"
+                )}
               </Text>
               <Feather
                 name="chevron-down"
@@ -718,7 +726,6 @@ export default function EditMenuScreen() {
                   {showDatePicker.start && (
                     <DateTimePicker
                       value={tempDate}
-                      
                       mode="date"
                       display={Platform.OS === "ios" ? "inline" : "default"}
                       onChange={(event, date) =>

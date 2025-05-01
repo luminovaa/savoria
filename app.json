@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "savoria",
+    "name": "Savoria",
     "slug": "savoria",
     "version": "1.0.0",
+    "platforms": ["android"],
     "screenOrientation": "unspecified",
     "icon": "./assets/logo/savoria-dark.png",
     "scheme": "myapp",
@@ -13,20 +14,25 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "ios": {
-      "supportsTablet": true
-    },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/logo/savoria-dark.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.anonymous.savoria"
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "permissions": [
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "READ_MEDIA_IMAGES",
+    "READ_EXTERNAL_STORAGE",
+    "WRITE_EXTERNAL_STORAGE"
+      ],
+      "package": "com.neoncode.savoria"
     },
     "plugins": [
       "expo-router",
@@ -39,6 +45,7 @@
           "backgroundColor": "#ffffff"
         }
       ]
+      
     ],
     "experiments": {
       "typedRoutes": true
@@ -50,6 +57,12 @@
       "eas": {
         "projectId": "6f619721-6e75-451e-8d7e-8e33eb75f03b"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6f619721-6e75-451e-8d7e-8e33eb75f03b"
     }
   }
 }

@@ -119,7 +119,7 @@ export default function SignIn() {
       opacity: 0.7,
     },
     buttonText: {
-      color: "#fff",
+      color: colors.buttonText,
       fontSize: isTablet ? 20 : 18,
       fontWeight: "600",
     },

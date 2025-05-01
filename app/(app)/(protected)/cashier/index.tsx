@@ -240,7 +240,7 @@ export default function UsersListScreen() {
       elevation: 5,
     },
     addButtonText: {
-      color: "#FFFFFF",
+      color: colors.buttonText,
       fontSize: 16,
       fontWeight: "600",
       marginLeft: 8,
@@ -294,7 +294,7 @@ export default function UsersListScreen() {
 
       <View style={styles.addButtonContainer}>
         <TouchableOpacity style={styles.addButton} onPress={handleAddCashier}>
-          <Feather name="plus" size={20} color="#FFFFFF" />
+          <Feather name="plus" size={20} color={colors.buttonText} />
           <Text style={styles.addButtonText}>Tambah Kasir</Text>
         </TouchableOpacity>
       </View>

@@ -10,6 +10,7 @@ export const themes: {[ key : string] : {
   accent: string,
   highlight: string,
   success: string,
+  buttonText: string,
 }} = {
   light: {
     background: '#F9F9F9',
@@ -23,6 +24,7 @@ export const themes: {[ key : string] : {
     success: '#4A8C6F',
     accent: '#D9A566',
     highlight: '#FCF3EF',
+    buttonText: '#FFFFFF',
   },
   dark: {
     background: '#1A1818',
@@ -36,5 +38,6 @@ export const themes: {[ key : string] : {
     success: '#5DAE8B',
     accent: '#E6B980',
     highlight: '#3D2E27',
+    buttonText: '#000000',
   },
 };
