@@ -235,17 +235,20 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       borderBottomColor: colors.border,
     },
     headerIcon: {
+      flexDirection: "row",
+      alignItems: "center",
       marginRight: 10,
+      marginBottom: -10,
       color: colors.primary,
     },
     headerText: {
-      fontSize: isTablet ? 18 : 16, // Smaller font on phones
+      fontSize: 16, // Smaller font on phones
       fontWeight: "bold",
       color: colors.text,
     },
     invoiceNumberContainer: {
       backgroundColor: colors.card,
-      padding: isTablet ? 12 : 10, // Slightly less padding on phones
+      padding: isTablet ? 8 : 10,
       borderRadius: 8,
       marginBottom: 15,
       borderWidth: 1,
@@ -292,13 +295,13 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       alignItems: "flex-end",
     },
     itemName: {
-      fontSize: isTablet ? 15 : 14, // Smaller font on phones
+      fontSize: isTablet ? 13 : 14, // Smaller font on phones
       fontWeight: "600",
       color: colors.text,
       flex: 1,
     },
     priceText: {
-      fontSize: isTablet ? 15 : 14, // Smaller font on phones
+      fontSize: isTablet ? 13 : 14, // Smaller font on phones
       fontWeight: "600",
       color: colors.text,
       textAlign: "right",
@@ -311,7 +314,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       textAlign: "right",
     },
     promoPrice: {
-      fontSize: isTablet ? 15 : 14, // Smaller font on phones
+      fontSize: isTablet ? 13 : 14, // Smaller font on phones
       fontWeight: "600",
       color: colors.primary,
       textAlign: "right",
@@ -333,8 +336,8 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       alignItems: "center",
     },
     itemImage: {
-      width: isTablet ? 60 : 50, // Smaller image on phones
-      height: isTablet ? 60 : 50, // Smaller image on phones
+      width: isTablet ? 40 : 50, // Smaller image on phones
+      height: isTablet ? 40 : 50, // Smaller image on phones
       borderRadius: 8,
       backgroundColor: colors.border,
       marginBottom: 8,
@@ -346,16 +349,16 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       borderRadius: 20,
       borderWidth: 1,
       borderColor: colors.border,
-      paddingHorizontal: isTablet ? 8 : 6, // Slightly less padding on phones
+      paddingHorizontal: isTablet ? 4 : 6, // Slightly less padding on phones
       paddingVertical: isTablet ? 4 : 3, // Slightly less padding on phones
     },
     quantityButton: {
-      padding: isTablet ? 4 : 3, // Slightly less padding on phones
+      padding: isTablet ? 2 : 3, // Slightly less padding on phones
       borderRadius: 15,
     },
     quantityText: {
       fontWeight: "600",
-      fontSize: isTablet ? 14 : 12, // Smaller font on phones
+      fontSize: isTablet ? 12 : 12, // Smaller font on phones
       color: colors.text,
       marginHorizontal: isTablet ? 10 : 8, // Slightly less margin on phones
       minWidth: 20,
@@ -376,7 +379,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       marginBottom: 5,
     },
     subtotalText: {
-      fontSize: isTablet ? 14 : 12, // Smaller font on phones
+      fontSize: isTablet ? 13 : 12, // Smaller font on phones
       color: colors.textSecondary,
     },
     subtotalAmount: {
@@ -475,7 +478,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
             color={colors.primary}
             style={{ marginRight: 8 }}
           />
-          <Text style={styles.invoiceNumberLabel}>Nomor Invoice:</Text>
+          <Text style={styles.invoiceNumberLabel}>Invoice:</Text>
           <Text style={styles.invoiceNumberText}>{invoiceNumber}</Text>
         </View>
       )}

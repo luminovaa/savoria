@@ -5,6 +5,7 @@ import MainCardMenu from "./_component/menu-card";
 import TypeCard from "./_component/type-card";
 import InvoiceCart from "./_component/invoice-card";
 import { widthPercentageToDP as wp } from "react-native-responsive-screen";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function HomeScreen() {
   const { colors } = useTheme();
@@ -24,10 +25,10 @@ export default function HomeScreen() {
       flexDirection: isTablet ? "row" : "column", 
     },
     leftSidebar: {
-      width: isTablet ? wp("9%") : wp("100%"),
+      width: isTablet ? wp("10.8%") : wp("100%"),
       paddingLeft: isTablet ? 20 : 10,
       paddingRight: isTablet ? 0 : 10,
-      height:  "auto",
+      height: isTablet ? "90%" : "auto",
       marginBottom: isTablet ? 0 : 10, 
     },
     cardTypeContainer: {
@@ -43,17 +44,17 @@ export default function HomeScreen() {
       marginBottom: isTablet ? 0 : 10,
     },
     rightSidebar: {
-      width: isTablet ? wp("26%") : wp("100%"), // Full width on mobile
+      width: isTablet ? wp("30%") : wp("100%"), 
       paddingRight: isTablet ? 20 : 10,
       paddingLeft: isTablet ? 20 : 10,
-      height:  "auto",
+      height: isTablet ? "80%" : "auto",
     },
     cardInvoiceContainer: {
       backgroundColor: colors.card,
       borderRadius: 10,
       padding: 20,
       elevation: 2,
-      height: isTablet ? "111%" : "auto",
+      minHeight: isTablet ? "80%" : "auto",
     },
     cardMenuContainer: {
       borderRadius: 10,
@@ -68,11 +69,11 @@ export default function HomeScreen() {
     setSelectedCategory(selectedCategory === categoryId ? null : categoryId);
   };
   const data = [
-    { key: "layout", type: "layout" }, // Single item for the entire layout
+    { key: "layout", type: "layout" },
   ];
 
   const renderItem = () => (
-    <View style={styles.layout}>
+    <SafeAreaView style={styles.layout}>
       {/* TypeCard */}
       <View style={styles.leftSidebar}>
         <View style={styles.cardTypeContainer}>
@@ -100,7 +101,7 @@ export default function HomeScreen() {
           <InvoiceCart cart={cart} setCart={setCart} />
         </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 
   return (

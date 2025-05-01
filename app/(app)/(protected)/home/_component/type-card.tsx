@@ -85,7 +85,7 @@ export default function TypeCard({ onCategorySelect, selectedCategory }: TypeCar
       marginVertical: isTablet ? 8 : 0,
       marginRight: isTablet ? 0 : 8,
       width: isTablet ? 80 : "auto",
-      minHeight: isTablet ? undefined : 40,
+      height: isTablet ? undefined : 40,
     },
     selectedItem: {
       backgroundColor: colors.secondary,

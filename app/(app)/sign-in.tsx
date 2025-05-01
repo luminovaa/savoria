@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  Alert,
 } from "react-native";
 import * as z from "zod";
 import { useSupabase } from "@/context/supabase-provider";
@@ -51,15 +52,16 @@ export default function SignIn() {
     },
     logoContainer: {
       alignItems: "center",
-      marginBottom: 0,
+      marginTop: isTablet ? -80 : 0,
+      marginBottom: isTablet ? -80 : 0,
     },
     logo: {
       width: isTablet ? wp("60%") : wp("80%"),
-      height: isTablet ? hp("40%") : hp("30%"),
+      height: isTablet ? hp("60%") : hp("30%"),
       resizeMode: "contain",
     },
     title: {
-      fontSize: isTablet ? 32 : 28, 
+      fontSize: 28, 
       fontWeight: "bold",
       color: colors.text,
       textAlign: "center",
@@ -88,8 +90,8 @@ export default function SignIn() {
     },
     input: {
       flex: 1,
-      padding: isTablet ? 18 : 16,
-      fontSize: isTablet ? 18 : 16,
+      padding: 16,
+      fontSize: 16,
       color: colors.text,
     },
     iconContainer: {
@@ -102,7 +104,7 @@ export default function SignIn() {
       marginLeft: 4,
     },
     buttonContainer: {
-      marginTop: 32,
+      marginTop: isTablet ? 20 : 32,
     },
     button: {
       backgroundColor: colors.primary,
@@ -123,14 +125,6 @@ export default function SignIn() {
       fontSize: isTablet ? 20 : 18,
       fontWeight: "600",
     },
-    forgotPassword: {
-      marginTop: 16,
-      alignItems: "center",
-    },
-    forgotPasswordText: {
-      color: colors.primary,
-      fontSize: 14,
-    },
   });
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -147,7 +141,7 @@ export default function SignIn() {
       form.reset();
       console.log(result);
     } catch (error: any) {
-      alert(error.message);
+      Alert.alert("Email Atau Password Salah");
       console.error("Sign in error:", error);
     }
   }
@@ -233,10 +227,6 @@ export default function SignIn() {
                 </Text>
               )}
             </View>
-
-            <TouchableOpacity style={styles.forgotPassword}>
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
 
             <View style={styles.buttonContainer}>
               <TouchableOpacity
