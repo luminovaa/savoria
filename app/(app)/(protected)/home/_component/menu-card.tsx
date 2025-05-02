@@ -15,7 +15,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useRouter } from "expo-router";
 import { supabase } from "@/utils/supabase";
 import { MenuItem } from "@/utils/types";
-import { formatCurrency } from "@/utils/format";
+import { capitalizeText, formatCurrency } from "@/utils/format";
 import { Feather } from "@expo/vector-icons";
 import MenuActionModal from "./modal-menu";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -398,7 +398,7 @@ export default function MainCardMenu({
 
         <View style={styles.contentContainer}>
           <Text style={styles.name} numberOfLines={2}>
-            {item.name_menu}
+            {capitalizeText(item.name_menu)}
           </Text>
 
           <View style={styles.priceContainer}>

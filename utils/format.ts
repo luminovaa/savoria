@@ -4,7 +4,14 @@ export const parseCurrency = (value: string): number => {
     return numericValue ? parseFloat(numericValue) : 0;
 };
 
-
+export const formatDatetoIndonesia = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  };
 export const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("id-ID", {
         style: "currency",
@@ -14,6 +21,11 @@ export const formatCurrency = (value: number) => {
     }).format(value);
 };
 
+export const formatCurrency2 = (value: number) => {
+    // Format number with thousands separator (comma) and no decimal
+    const formatted = Math.round(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return `Rp${formatted}`; // Simple Rp prefix, no Unicode currency symbol
+  };2
 
 export const capitalizeText = (text: any): string => {
     if (typeof text !== "string") return String(text);

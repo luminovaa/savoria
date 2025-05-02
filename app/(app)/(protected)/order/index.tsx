@@ -31,14 +31,47 @@ export default function OrderHistoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
+  const [userRole, setUserRole] = useState<string | null>(null); // State untuk menyimpan role pengguna
   const LIMIT = 10;
-  
+
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
-  
+
   const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
   const isTablet = SCREEN_WIDTH > 600;
+
+  // Fungsi untuk mengambil role pengguna
+  const fetchUserRole = useCallback(async () => {
+    try {
+      // Ambil data pengguna yang sedang login
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) throw new Error("Gagal mendapatkan data pengguna");
+
+      // Ambil data profil pengguna berdasarkan user.id
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role_id")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError || !profile) throw new Error("Gagal mendapatkan data profil");
+
+      // Ambil nama role dari tabel role berdasarkan role_id
+      const { data: role, error: roleError } = await supabase
+        .from("role")
+        .select("name")
+        .eq("id", profile.role_id)
+        .single();
+
+      if (roleError || !role) throw new Error("Gagal mendapatkan data role");
+
+      setUserRole(role.name);
+    } catch (error: any) {
+      setError(error.message);
+      Alert.alert("Error", "Gagal memuat data role pengguna");
+    }
+  }, []);
 
   const stats = useMemo(() => {
     if (!allOrders.length) {
@@ -179,8 +212,9 @@ export default function OrderHistoryScreen() {
   }, [selectedMonth, selectedYear]);
 
   useEffect(() => {
+    fetchUserRole(); // Panggil fungsi untuk mengambil role pengguna saat komponen dimuat
     fetchAllOrders();
-  }, [fetchAllOrders]);
+  }, [fetchAllOrders, fetchUserRole]);
 
   useEffect(() => {
     fetchOrders(0, true);
@@ -281,30 +315,53 @@ export default function OrderHistoryScreen() {
   const renderStatCards = () => {
     return (
       <View style={styles.statsContainer}>
-        <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Penjualan Hari Ini</Text>
-            <Text style={[styles.statValue, { color: colors.text }]}>{stats.todayOrders}</Text>
-            <Text style={[styles.statUnit, { color: colors.primary }]}>Pesanan</Text>
+        {isTablet ? (
+          // Single row for tablets
+          <View style={[styles.statsRow, styles.statsRowTablet]}>
+            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Penjualan Hari Ini</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>{stats.todayOrders}</Text>
+              <Text style={[styles.statUnit, { color: colors.primary }]}>Pesanan</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Hari Ini</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.todayRevenue)}</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Bulan Ini</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.monthlyRevenue)}</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Tahun Ini</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.yearlyRevenue)}</Text>
+            </View>
           </View>
-          
-          <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Hari Ini</Text>
-            <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.todayRevenue)}</Text>
-          </View>
-        </View>
-        
-        <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Bulan Ini</Text>
-            <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.monthlyRevenue)}</Text>
-          </View>
-          
-          <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Tahun Ini</Text>
-            <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.yearlyRevenue)}</Text>
-          </View>
-        </View>
+        ) : (
+          // Two rows for mobile phones
+          <>
+            <View style={styles.statsRow}>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Penjualan Hari Ini</Text>
+                <Text style={[styles.statValue, { color: colors.text }]}>{stats.todayOrders}</Text>
+                <Text style={[styles.statUnit, { color: colors.primary }]}>Pesanan</Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Hari Ini</Text>
+                <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.todayRevenue)}</Text>
+              </View>
+            </View>
+            <View style={styles.statsRow}>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Bulan Ini</Text>
+                <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.monthlyRevenue)}</Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Tahun Ini</Text>
+                <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.yearlyRevenue)}</Text>
+              </View>
+            </View>
+          </>
+        )}
       </View>
     );
   };
@@ -344,7 +401,7 @@ export default function OrderHistoryScreen() {
               {orderDate} - {orderTime}
             </Text>
             <Text style={[styles.paymentMethod, { color: colors.textSecondary }]}>
-              Pembayaran: {item.payment_type}
+              {item.payment_type}
             </Text>
           </View>
           <Text style={[styles.orderAmount, { color: colors.text }]}>
@@ -376,25 +433,7 @@ export default function OrderHistoryScreen() {
     content: {
       flex: 1,
     },
-    headerContainer: {
-    marginTop: isTablet ? 0 : -35,
-      marginBottom: 16,
-      paddingHorizontal: 16,
-      flexDirection: "column",
-      justifyContent: "center",
-      alignItems: "center"
-    },
-    headerTitle: {
-      fontSize: 24,
-      fontWeight: "bold",
-      color: colors.text,
-      marginBottom: 8,
-    },
-    headerSubtitle: {
-      fontSize: 14,
-      color: colors.textSecondary,
-      textAlign: "center",
-    },
+       
     filterContainer: {
       paddingHorizontal: 16,
       paddingVertical: 12,
@@ -425,6 +464,9 @@ export default function OrderHistoryScreen() {
       justifyContent: "space-between",
       marginBottom: 12,
     },
+    statsRowTablet: {
+      marginBottom: 0, // Remove extra margin for single row on tablets
+    },
     statCard: {
       flex: 1,
       borderRadius: 12,
@@ -438,6 +480,7 @@ export default function OrderHistoryScreen() {
       shadowOpacity: 0.1,
       shadowRadius: 4,
       elevation: 2,
+      minWidth: isTablet ? 150 : undefined, // Ensure cards don't get too narrow on tablets
     },
     statLabel: {
       fontSize: 12,
@@ -460,7 +503,8 @@ export default function OrderHistoryScreen() {
     orderItem: {
       backgroundColor: colors.card,
       borderRadius: 12,
-      padding: 16,
+      padding: isTablet? 10 : 16,
+      paddingHorizontal: isTablet? 15 : 16,
       marginHorizontal: 16,
       marginBottom: 12,
       shadowColor: theme === "dark" ? "#000" : colors.primary,
@@ -473,10 +517,10 @@ export default function OrderHistoryScreen() {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 12,
+      marginBottom: isTablet ? 8 : 12,
     },
     invoiceNumber: {
-      fontSize: 16,
+      fontSize: isTablet ? 14 : 16,
       fontWeight: "bold",
     },
     statusBadge: {
@@ -498,11 +542,11 @@ export default function OrderHistoryScreen() {
       flex: 1,
     },
     orderDate: {
-      fontSize: 14,
+      fontSize: isTablet? 12 : 14,
       marginBottom: 4,
     },
     paymentMethod: {
-      fontSize: 14,
+      fontSize: isTablet? 12 : 14,
       textTransform: "capitalize",
     },
     orderAmount: {
@@ -561,18 +605,11 @@ export default function OrderHistoryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>Riwayat Pesanan</Text>
-        <Text style={styles.headerSubtitle}>
-          Lihat dan kelola semua pesanan yang telah dibuat
-        </Text>
-      </View>
-
       {/* Filter Section */}
       {renderMonthPicker()}
       
-      {/* Statistics Cards */}
-      {renderStatCards()}
+      {/* Statistics Cards - Hanya ditampilkan jika role adalah 'Owner' */}
+      {userRole === "Owner" && renderStatCards()}
 
       {/* Order List */}
       <View style={styles.listContainer}>

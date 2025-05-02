@@ -24,9 +24,6 @@ const ProfileSection = ({ userData, colors, styles }: ProfileSectionProps) => {
       <View style={styles.profileInfo}>
         <Text style={styles.profileName}>{capitalizeText(userData.name)}</Text>
         <Text style={styles.profileEmail}>{userData.email}</Text>
-        <TouchableOpacity style={styles.profileButton}>
-          <Text style={styles.profileButtonText}>Edit Profil</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );

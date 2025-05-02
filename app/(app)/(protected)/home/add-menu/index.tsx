@@ -11,14 +11,15 @@ import {
   Image,
   Platform,
   Dimensions,
-  Linking,
+  PermissionsAndroid, 
 } from "react-native";
 import { supabase } from "@/utils/supabase";
 import { useTheme } from "@/hooks/use-theme";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { z } from "zod";
-import * as ImagePicker from "expo-image-picker";
+import {Asset, ImageLibraryOptions, launchImageLibrary} from 'react-native-image-picker';
+
 import DateTimePicker from "@react-native-community/datetimepicker";
 import CategoryModal from "./_component/category-modal";
 import { capitalizeText, formatCurrency, parseCurrency } from "@/utils/format";
@@ -75,13 +76,18 @@ export default function AddMenuScreen() {
   const [tempDate, setTempDate] = useState(new Date());
 
   useEffect(() => {
-    initializeCategories();
-    checkIfTablet();
-
+    const initialize = async () => {
+      await requestStoragePermission();
+      initializeCategories();
+      checkIfTablet();
+    };
+  
+    initialize();
+  
     const subscription = Dimensions.addEventListener("change", () => {
       checkIfTablet();
     });
-
+  
     return () => {
       subscription.remove();
     };
@@ -91,6 +97,42 @@ export default function AddMenuScreen() {
     const { width, height } = Dimensions.get("window");
     const screenWidth = Math.min(width, height);
     setIsTablet(screenWidth >= 768);
+  };
+
+  const requestStoragePermission = async () => {
+    try {
+      // Untuk Android 13 (API level 33) dan di atasnya
+      if (Platform.OS === 'android' && Platform.Version >= 33) {
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
+          PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
+        ]);
+        
+        return (
+          granted['android.permission.READ_MEDIA_IMAGES'] === PermissionsAndroid.RESULTS.GRANTED &&
+          granted['android.permission.READ_MEDIA_VIDEO'] === PermissionsAndroid.RESULTS.GRANTED
+        );
+      }
+      else if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+          {
+            title: "Izin Akses Penyimpanan",
+            message: "Aplikasi membutuhkan akses ke penyimpanan untuk memilih gambar",
+            buttonNeutral: "Tanya Nanti",
+            buttonNegative: "Batal",
+            buttonPositive: "OK"
+          }
+        );
+        
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      }
+      // Untuk iOS, izin sudah ditangani oleh ImagePicker
+      return true;
+    } catch (err) {
+      console.warn(err);
+      return false;
+    }
   };
 
   async function initializeCategories() {
@@ -114,33 +156,25 @@ export default function AddMenuScreen() {
       Alert.alert("Error", "Gagal memuat kategori: " + error.message);
     }
   }
-  // const requestManageStorage = async () => {
-  //   if (Platform.OS === 'android' && Platform.Version >= 30) {
-  //     await Linking.openSettings();
-  //   }
-  // };
 
-  const pickImage = async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission denied", "Please allow access to photos.");
-        return;
+  const pickImage = () => {
+    const options: ImageLibraryOptions = {
+      mediaType: 'photo',
+      quality: 1,
+      selectionLimit: 1,
+    };
+
+    launchImageLibrary(options, (response) => {
+      if (response.didCancel) {
+        console.log('User cancelled image picker');
+      } else if (response.errorCode) {
+        console.log('ImagePicker Error: ', response.errorMessage);
+        Alert.alert('Error', response.errorMessage || 'Gagal memilih gambar');
+      } else if (response.assets && response.assets.length > 0) {
+        const selectedImage: Asset = response.assets[0];
+        setImage(selectedImage.uri || null);
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 1,
-      });
-  
-      if (!result.canceled) {
-        setImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      Alert.alert("Error", "Gagal memilih gambar" + error);
-      console.error(error);
-    }
+    });
   };
 
   const uploadImage = async (uri: string) => {

@@ -18,43 +18,44 @@ export default function HomeScreen() {
     container: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingTop: 20,
+      paddingTop: isTablet ? 20 : -20,
     },
     layout: {
       flex: 1,
-      flexDirection: isTablet ? "row" : "column", 
+      flexDirection: isTablet ? "row" : "column",
     },
     leftSidebar: {
       width: isTablet ? wp("10.8%") : wp("100%"),
       paddingLeft: isTablet ? 20 : 10,
       paddingRight: isTablet ? 0 : 10,
-      height: isTablet ? "90%" : "auto",
-      marginBottom: isTablet ? 0 : 10, 
+      height: isTablet ? "98%" : "auto",
+      marginBottom: isTablet ? 0 : 10,
     },
     cardTypeContainer: {
       backgroundColor: colors.card,
       borderRadius: 10,
       padding: 15,
       elevation: 2,
-      height: isTablet ? "111%" : "auto",
+      height: isTablet ? "100%" : "auto",
     },
     contentArea: {
       flex: isTablet ? 1 : 0,
-      paddingHorizontal: isTablet ? 20 : 10,
+      paddingHorizontal: isTablet ? 0 : 10,
       marginBottom: isTablet ? 0 : 10,
     },
     rightSidebar: {
-      width: isTablet ? wp("30%") : wp("100%"), 
+      width: isTablet ? wp("30%") : wp("100%"),
       paddingRight: isTablet ? 20 : 10,
       paddingLeft: isTablet ? 20 : 10,
-      height: isTablet ? "80%" : "auto",
+      height: isTablet ? "97%" : "auto", // Ensure full height for tablet
     },
     cardInvoiceContainer: {
       backgroundColor: colors.card,
       borderRadius: 10,
       padding: 20,
       elevation: 2,
-      minHeight: isTablet ? "80%" : "auto",
+      height: isTablet ? "100%" : "auto", // Full height for tablet
+      flex: isTablet ? 1 : 0, // Ensure it takes available space
     },
     cardMenuContainer: {
       borderRadius: 10,
@@ -68,50 +69,79 @@ export default function HomeScreen() {
   const handleCategorySelect = (categoryId: number | null) => {
     setSelectedCategory(selectedCategory === categoryId ? null : categoryId);
   };
-  const data = [
-    { key: "layout", type: "layout" },
-  ];
-
-  const renderItem = () => (
-    <SafeAreaView style={styles.layout}>
-      {/* TypeCard */}
-      <View style={styles.leftSidebar}>
-        <View style={styles.cardTypeContainer}>
-          <TypeCard
-            selectedCategory={selectedCategory}
-            onCategorySelect={handleCategorySelect}
-          />
-        </View>
-      </View>
-
-      {/* MainCardMenu */}
-      <View style={styles.contentArea}>
-        <View style={styles.cardMenuContainer}>
-          <MainCardMenu
-            selectedCategory={selectedCategory}
-            cart={cart}
-            setCart={setCart}
-          />
-        </View>
-      </View>
-
-      {/* InvoiceCart */}
-      <View style={styles.rightSidebar}>
-        <View style={styles.cardInvoiceContainer}>
-          <InvoiceCart cart={cart} setCart={setCart} />
-        </View>
-      </View>
-    </SafeAreaView>
-  );
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={data}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.key}
-        contentContainerStyle={{ paddingBottom: 30 }}
-      />
-    </View>
+    <SafeAreaView style={styles.container}>
+      {isTablet ? (
+        // Layout untuk tablet (horizontal)
+        <View style={styles.layout}>
+          {/* TypeCard */}
+          <View style={styles.leftSidebar}>
+            <View style={styles.cardTypeContainer}>
+              <TypeCard
+                selectedCategory={selectedCategory}
+                onCategorySelect={handleCategorySelect}
+              />
+            </View>
+          </View>
+
+          {/* Scrollable MainCardMenu */}
+          <View style={styles.contentArea}>
+            <ScrollView
+              style={styles.cardMenuContainer}
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <MainCardMenu
+                selectedCategory={selectedCategory}
+                cart={cart}
+                setCart={setCart}
+              />
+            </ScrollView>
+          </View>
+
+          {/* InvoiceCart */}
+          <View style={styles.rightSidebar}>
+            <View style={styles.cardInvoiceContainer}>
+              <InvoiceCart cart={cart} setCart={setCart} />
+            </View>
+          </View>
+        </View>
+      ) : (
+        // Layout untuk ponsel (vertikal)
+        <ScrollView
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* TypeCard */}
+          <View style={styles.leftSidebar}>
+            <View style={styles.cardTypeContainer}>
+              <TypeCard
+                selectedCategory={selectedCategory}
+                onCategorySelect={handleCategorySelect}
+              />
+            </View>
+          </View>
+
+          {/* MainCardMenu */}
+          <View style={styles.contentArea}>
+            <View style={styles.cardMenuContainer}>
+              <MainCardMenu
+                selectedCategory={selectedCategory}
+                cart={cart}
+                setCart={setCart}
+              />
+            </View>
+          </View>
+
+          {/* InvoiceCart */}
+          <View style={styles.rightSidebar}>
+            <View style={styles.cardInvoiceContainer}>
+              <InvoiceCart cart={cart} setCart={setCart} />
+            </View>
+          </View>
+        </ScrollView>
+      )}
+    </SafeAreaView>
   );
 }

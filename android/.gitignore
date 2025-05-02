@@ -1,6 +1,6 @@
 # OSX
 #
-# .DS_Store
+.DS_Store
 
 # Android/IntelliJ
 #
@@ -13,4 +13,4 @@ local.properties
 .cxx/
 
 # Bundle artifacts
-# *.jsbundle
+*.jsbundle

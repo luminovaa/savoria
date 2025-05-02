@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { ProfileWithRole, UserList } from "@/utils/types";
 import { capitalizeText } from "@/utils/format";
-import  UserActionModal  from "./_components/modal-user";
+import UserActionModal from "./_components/modal-user";
 
 export default function UsersListScreen() {
   const { colors, theme } = useTheme();
@@ -28,11 +28,48 @@ export default function UsersListScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
   const [selectedUser, setSelectedUser] = useState<UserList | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null); // State untuk menyimpan role pengguna
 
   useEffect(() => {
     fetchUsers();
+    fetchUserRole();
   }, []);
 
+  const fetchUserRole = useCallback(async () => {
+    try {
+      // Ambil data pengguna yang sedang login
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError || !user)
+        throw new Error("Gagal mendapatkan data pengguna");
+
+      // Ambil data profil pengguna berdasarkan user.id
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role_id")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError || !profile)
+        throw new Error("Gagal mendapatkan data profil");
+
+      // Ambil nama role dari tabel role berdasarkan role_id
+      const { data: role, error: roleError } = await supabase
+        .from("role")
+        .select("name")
+        .eq("id", profile.role_id)
+        .single();
+
+      if (roleError || !role) throw new Error("Gagal mendapatkan data role");
+
+      setUserRole(role.name);
+    } catch (error: any) {
+      setError(error.message);
+      Alert.alert("Error", "Gagal memuat data role pengguna");
+    }
+  }, []);
   async function fetchUsers() {
     try {
       setLoading(true);
@@ -199,11 +236,11 @@ export default function UsersListScreen() {
       backgroundColor: colors.background,
     },
     roleContainer: {
-      marginLeft: "auto", 
+      marginLeft: "auto",
       paddingLeft: 12,
     },
     roleText: {
-      fontSize: 16, 
+      fontSize: 16,
       fontWeight: "600",
       textTransform: "capitalize",
     },
@@ -291,21 +328,23 @@ export default function UsersListScreen() {
           }
         />
       </View>
-
-      <View style={styles.addButtonContainer}>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddCashier}>
-          <Feather name="plus" size={20} color={colors.buttonText} />
-          <Text style={styles.addButtonText}>Tambah Kasir</Text>
-        </TouchableOpacity>
-      </View>
-
-      <UserActionModal
+      {userRole === "Owner" && (
+        <View style={styles.addButtonContainer}>
+          <TouchableOpacity style={styles.addButton} onPress={handleAddCashier}>
+            <Feather name="plus" size={20} color={colors.buttonText} />
+            <Text style={styles.addButtonText}>Tambah Kasir</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {userRole === "Owner" && (
+        <UserActionModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         user={selectedUser}
         position={modalPosition}
         onDelete={confirmDeleteUser}
-      />
+        />
+      )}
     </SafeAreaView>
   );
 }

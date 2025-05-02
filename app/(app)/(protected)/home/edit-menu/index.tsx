@@ -8,17 +8,16 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   Image,
   Platform,
   Dimensions,
+  PermissionsAndroid,
 } from "react-native";
 import { supabase } from "@/utils/supabase";
 import { useTheme } from "@/hooks/use-theme";
 import { Feather } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { z } from "zod";
-import * as ImagePicker from "expo-image-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { capitalizeText, formatCurrency, parseCurrency } from "@/utils/format";
 import {
@@ -26,6 +25,8 @@ import {
   heightPercentageToDP as hp,
 } from "react-native-responsive-screen";
 import CategoryModal from "../add-menu/_component/category-modal";
+import { Asset, ImageLibraryOptions, launchImageLibrary } from "react-native-image-picker";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const menuFormSchema = z.object({
   name_menu: z.string().min(1, "Nama menu wajib diisi"),
@@ -45,18 +46,6 @@ interface Category {
   name_category: string;
 }
 
-interface MenuItem {
-  id: number;
-  name_menu: string;
-  description: string;
-  price: number;
-  category_id: number;
-  images: string | null;
-  promo: boolean;
-  promo_price: number | null;
-  promo_start: string | null;
-  promo_end: string | null;
-}
 
 export default function EditMenuScreen() {
   const { colors, theme } = useTheme();
@@ -95,7 +84,7 @@ export default function EditMenuScreen() {
       return;
     }
     checkIfTablet();
-
+    requestStoragePermission();
     fetchData();
 
     const subscription = Dimensions.addEventListener("change", () => {
@@ -155,28 +144,60 @@ export default function EditMenuScreen() {
     }
   }
 
-  const pickImage = async () => {
-    try {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission denied", "Please allow access to photos.");
-        return;
+  const requestStoragePermission = async () => {
+      try {
+        // Untuk Android 13 (API level 33) dan di atasnya
+        if (Platform.OS === 'android' && Platform.Version >= 33) {
+          const granted = await PermissionsAndroid.requestMultiple([
+            PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
+            PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
+          ]);
+          
+          return (
+            granted['android.permission.READ_MEDIA_IMAGES'] === PermissionsAndroid.RESULTS.GRANTED &&
+            granted['android.permission.READ_MEDIA_VIDEO'] === PermissionsAndroid.RESULTS.GRANTED
+          );
+        }
+        else if (Platform.OS === 'android') {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+            {
+              title: "Izin Akses Penyimpanan",
+              message: "Aplikasi membutuhkan akses ke penyimpanan untuk memilih gambar",
+              buttonNeutral: "Tanya Nanti",
+              buttonNegative: "Batal",
+              buttonPositive: "OK"
+            }
+          );
+          
+          return granted === PermissionsAndroid.RESULTS.GRANTED;
+        }
+        // Untuk iOS, izin sudah ditangani oleh ImagePicker
+        return true;
+      } catch (err) {
+        console.warn(err);
+        return false;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
+    };
+   const pickImage = () => {
+      const options: ImageLibraryOptions = {
+        mediaType: 'photo',
         quality: 1,
+        selectionLimit: 1,
+      };
+  
+      launchImageLibrary(options, (response) => {
+        if (response.didCancel) {
+          console.log('User cancelled image picker');
+        } else if (response.errorCode) {
+          console.log('ImagePicker Error: ', response.errorMessage);
+          Alert.alert('Error', response.errorMessage || 'Gagal memilih gambar');
+        } else if (response.assets && response.assets.length > 0) {
+          const selectedImage: Asset = response.assets[0];
+          setImage(selectedImage.uri || null);
+        }
       });
-
-      if (!result.canceled) {
-        setImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      Alert.alert("Error", "Gagal memilih gambar");
-    }
-  };
+    };
 
   const uploadImage = async (uri: string) => {
     try {

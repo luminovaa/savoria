@@ -68,7 +68,8 @@ export default function TypeCard({ onCategorySelect, selectedCategory }: TypeCar
       flexDirection: isTablet ? "column" : "row",
       justifyContent: "flex-start",
       alignItems: isTablet ? "center" : "flex-start",
-      padding: 15,
+      padding: 10,
+      marginTop: isTablet ? -20 : 0,
       borderRadius: 20,
     },
     scrollContainer: {
@@ -80,9 +81,9 @@ export default function TypeCard({ onCategorySelect, selectedCategory }: TypeCar
       justifyContent: "center",
       backgroundColor: colors.card,
       borderRadius: 12,
-      paddingVertical: isTablet ? 15 : 10,
+      paddingVertical: isTablet ? 13 : 10,
       paddingHorizontal: isTablet ? 7 : 15,
-      marginVertical: isTablet ? 8 : 0,
+      marginVertical: isTablet ? 7 : 0,
       marginRight: isTablet ? 0 : 8,
       width: isTablet ? 80 : "auto",
       height: isTablet ? undefined : 40,
@@ -97,7 +98,7 @@ export default function TypeCard({ onCategorySelect, selectedCategory }: TypeCar
     },
     text: {
       color: colors.textSecondary,
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: "500",
       textAlign: "center",
     },
@@ -127,7 +128,7 @@ export default function TypeCard({ onCategorySelect, selectedCategory }: TypeCar
         <View style={styles.iconContainer}>
           <MaterialCommunityIcons 
             name="all-inclusive" 
-            size={24} 
+            size={20} 
             color={selectedCategory === null ? colors.primary : colors.primary} 
           />
         </View>

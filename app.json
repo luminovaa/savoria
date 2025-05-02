@@ -12,12 +12,12 @@
     "splash": {
       "image": "./assets/logo/savoria-dark.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#4F1D03"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo/savoria-dark.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#4F1D03"
       },
       "permissions": [
         "BLUETOOTH_CONNECT",
@@ -39,13 +39,19 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/logo/savoria-light.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Aplikasi membutuhkan akses ke galeri foto Anda",
+          "cameraPermission": "Aplikasi membutuhkan akses ke kamera Anda"
+        }
       ]
-      
     ],
     "experiments": {
       "typedRoutes": true
