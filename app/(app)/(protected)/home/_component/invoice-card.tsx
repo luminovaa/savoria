@@ -17,7 +17,12 @@ import {
 } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { supabase } from "@/utils/supabase";
-import { capitalizeText, formatCurrency, formatCurrency2, formatDatetoIndonesia } from "@/utils/format";
+import {
+  capitalizeText,
+  formatCurrency,
+  formatCurrency2,
+  formatDatetoIndonesia,
+} from "@/utils/format";
 import { Feather } from "@expo/vector-icons";
 import { BLEPrinter } from "react-native-thermal-receipt-printer";
 import { Picker } from "@react-native-picker/picker";
@@ -42,10 +47,13 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const [invoiceNumber, setInvoiceNumber] = useState<string>("");
   const { colors } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
-  const [bluetoothDevices, setBluetoothDevices] = useState<BluetoothDevice[]>([]);
+  const [bluetoothDevices, setBluetoothDevices] = useState<BluetoothDevice[]>(
+    []
+  );
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [paymentType, setPaymentType] = useState<"cash" | "qris">("cash");
 
   useEffect(() => {
     generateUniqueInvoiceNumber();
@@ -93,7 +101,8 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   };
 
   const calculateSubtotal = (item: MenuItem, quantity: number) => {
-    const price = item.promo && item.promo_price ? item.promo_price : item.price;
+    const price =
+      item.promo && item.promo_price ? item.promo_price : item.price;
     return price * quantity;
   };
 
@@ -157,7 +166,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
 
   const handleOrder = async () => {
     try {
-      const total = calculateTotal();
+      // Validate user authentication and profile
       const {
         data: { user },
         error: authError,
@@ -175,46 +184,10 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
         throw new Error("Profile not found for this user");
       }
 
-      const profileId = profileData.id;
-      const { data: orderData, error: orderError } = await supabase
-        .from("orders")
-        .insert({
-          created_at: new Date().toISOString(),
-          invoice_number: invoiceNumber,
-          total: Object.values(cart).reduce((sum, qty) => sum + qty, 0),
-          total_amount: total,
-          user_id: profileId,
-          payment_type: "cash",
-          status: "completed",
-        })
-        .select("id")
-        .single();
-
-      if (orderError) throw orderError;
-
-      const orderId = orderData.id;
-      setOrderId(orderId);
-      
-      const orderItems = menuItems.map((item) => ({
-        created_at: new Date().toISOString(),
-        quantity: cart[item.id.toString()],
-        subtotal: calculateSubtotal(item, cart[item.id.toString()]),
-        menu_id: item.id,
-        order_id: orderId,
-        price: item.promo && item.promo_price ? item.promo_price : item.price,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from("order_items")
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
-      // Show print modal after successful order
+      // Proceed to scan Bluetooth devices
       scanBluetoothDevices();
-      
     } catch (error) {
-      console.error("Error placing order:", error);
+      console.error("Error initiating order:", error);
       Alert.alert("Error", "Gagal memproses pesanan");
     }
   };
@@ -231,7 +204,8 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
           permission: PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
           rationale: {
             title: "Bluetooth Scan Permission",
-            message: "Aplikasi memerlukan izin untuk memindai perangkat Bluetooth untuk menghubungkan ke printer.",
+            message:
+              "Aplikasi memerlukan izin untuk memindai perangkat Bluetooth untuk menghubungkan ke printer.",
             buttonPositive: "OK",
             buttonNegative: "Cancel",
           },
@@ -240,7 +214,8 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
           permission: PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
           rationale: {
             title: "Bluetooth Connect Permission",
-            message: "Aplikasi memerlukan izin untuk menghubungkan ke printer Bluetooth.",
+            message:
+              "Aplikasi memerlukan izin untuk menghubungkan ke printer Bluetooth.",
             buttonPositive: "OK",
             buttonNegative: "Cancel",
           },
@@ -262,8 +237,13 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
 
         if (result !== PermissionsAndroid.RESULTS.GRANTED) {
           allGranted = false;
-          const shouldShowRationale = await PermissionsAndroid.request(permission);
-          if (!shouldShowRationale && result === PermissionsAndroid.RESULTS.DENIED) {
+          const shouldShowRationale = await PermissionsAndroid.request(
+            permission
+          );
+          if (
+            !shouldShowRationale &&
+            result === PermissionsAndroid.RESULTS.DENIED
+          ) {
             Alert.alert(
               "Izin Diperlukan",
               `Izin ${rationale.title} diperlukan untuk mencetak struk. Silakan aktifkan di Pengaturan.`,
@@ -329,84 +309,186 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     try {
       setPrinting(true);
       await BLEPrinter.connectPrinter(inner_mac_address);
+
+      // Print receipt first
       await printReceipt();
+
+      // After successful printing, insert data into database
+      const total = calculateTotal();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const profileId = user!.id;
+
+      const { data: orderData, error: orderError } = await supabase
+        .from("orders")
+        .insert({
+          created_at: new Date().toISOString(),
+          invoice_number: invoiceNumber,
+          total: Object.values(cart).reduce((sum, qty) => sum + qty, 0),
+          total_amount: total,
+          user_id: profileId,
+          payment_type: paymentType,
+          status: "completed",
+        })
+        .select("id")
+        .single();
+
+      if (orderError) throw orderError;
+
+      const orderId = orderData.id;
+      setOrderId(orderId);
+
+      const orderItems = menuItems.map((item) => ({
+        created_at: new Date().toISOString(),
+        quantity: cart[item.id.toString()],
+        subtotal: calculateSubtotal(item, cart[item.id.toString()]),
+        menu_id: item.id,
+        order_id: orderId,
+        price: item.promo && item.promo_price ? item.promo_price : item.price,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from("order_items")
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      // Clear cart and close modal on success
       setModalVisible(false);
       setCart({});
-      Alert.alert("Sukses", "Struk berhasil dicetak");
+      Alert.alert("Sukses", "Struk berhasil dicetak dan pesanan tersimpan");
     } catch (error) {
-      console.error("Print error:", error);
-      Alert.alert("Error", "Gagal mencetak struk");
+      console.error("Print or database error:", error);
+      Alert.alert("Error", "Gagal mencetak struk atau menyimpan pesanan");
     } finally {
       setPrinting(false);
     }
   };
 
-  const printReceipt = async () => {
-    if (!orderId) return;
-    
+  async function printReceipt() {
     try {
-      // Fetch order details
-      const { data: orderData, error: orderError } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("id", orderId)
-        .single();
-      
-      if (orderError || !orderData) throw orderError;
-
-      // Fetch order items
-      const { data: itemsData, error: itemsError } = await supabase
-        .from("order_items")
-        .select("*, menu:menu_id(name_menu, price, promo_price, promo)")
-        .eq("order_id", orderId);
-      
-      if (itemsError) throw itemsError;
-
-      // Fetch shop details
       const { data: shopData, error: shopError } = await supabase
         .from("shop")
         .select("name, address, phone")
         .single();
-      
+
       if (shopError) throw shopError;
 
-      // Format receipt
-      let receiptText = `
-<C>=============================</C>
-<C>** ${shopData.name.slice(0, 16).toUpperCase()} **</C>
-<C>${shopData.address.slice(0, 24)}</C>
-<C>Telp: ${shopData.phone.slice(0, 13)}</C>
-<C>=============================</C>
-<L>INV: ${orderData.invoice_number.slice(0, 10)}</L>
-<L>TGL: ${formatDatetoIndonesia(orderData.created_at).slice(0, 15)}</L>
-<C>-----------------------------</C>`;
+      const splitLongText = (text: string, maxLength: number): string[] => {
+        const words = text.split(" ");
+        const lines: string[] = [];
+        let currentLine = words[0] || "";
 
-      // Add items
-      itemsData.forEach((item) => {
-        const maxLength = 24;
-        const itemName = item.menu?.name_menu || "Item";
-        const formattedName = itemName.length > maxLength 
-          ? `${itemName.substring(0, maxLength - 3)}...` 
-          : itemName;
-        
-        const leftText = `${item.quantity}x ${capitalizeText(formattedName)}`;
-        const price = item.menu?.promo && item.menu?.promo_price 
-          ? item.menu.promo_price 
-          : item.menu?.price || 0;
-        const subtotal = formatCurrency2(price * item.quantity).padStart(10);
-        
+        for (let i = 1; i < words.length; i++) {
+          const word = words[i];
+          if (currentLine.length + word.length + 1 <= maxLength) {
+            currentLine += " " + word;
+          } else {
+            lines.push(currentLine);
+            currentLine = word;
+          }
+        }
+        lines.push(currentLine);
+        return lines;
+      };
+
+      const splitTextToLines = (
+        text: string,
+        maxLength: number,
+        maxLines: number = 2
+      ): string[] => {
+        const words = text.split(" ");
+        const lines: string[] = [];
+        let currentLine = words[0] || "";
+
+        for (let i = 1; i < words.length; i++) {
+          const word = words[i];
+          if (currentLine.length + word.length + 1 <= maxLength) {
+            currentLine += " " + word;
+          } else {
+            if (lines.length < maxLines - 1) {
+              lines.push(currentLine);
+              currentLine = word;
+            } else {
+              currentLine += " " + word;
+              if (currentLine.length > maxLength) {
+                currentLine = currentLine.substring(0, maxLength - 3) + "...";
+              }
+              break;
+            }
+          }
+        }
+
+        if (currentLine) {
+          lines.push(currentLine);
+        }
+
+        return lines;
+      };
+
+      const formatReceiptLine = (
+        left: string,
+        right: string,
+        width: number = 32
+      ): string => {
+        const leftLen = left.length;
+        const rightLen = right.length;
+        const spacesNeeded = Math.max(1, width - leftLen - rightLen);
+        const spaces = " ".repeat(spacesNeeded);
+
+        return `<L>${left}${spaces}${right}</L>`;
+      };
+
+      const shopName = shopData.name.toUpperCase();
+      const addressLines = splitLongText(shopData.address, 32);
+      const phoneText = `Telp: ${shopData.phone}`;
+
+      let receiptText = `
+  <C>=============================</C>
+  <C>** ${shopName.slice(0, 32)} **</C>`;
+
+      addressLines.forEach((line) => {
         receiptText += `
-<L>${leftText}</L>
-<R>${subtotal}</R>`;
+  <C>${line}</C>`;
       });
 
       receiptText += `
-<C>-----------------------------</C>
-<L>TOTAL:<R>${formatCurrency2(orderData.total_amount)}</R></L>
-<C>=============================</C>
-<C>*** TERIMA KASIH ***</C>
-<C>Barang yang dibeli</C>
-<C>tidak dapat ditukar</C>`;
+  <C>${phoneText.slice(0, 32)}</C>
+  <C>=============================</C>
+  <L>INV: ${invoiceNumber.slice(0, 10)}</L>
+  <L>TGL: ${formatDatetoIndonesia(new Date().toISOString()).slice(0, 15)}</L>
+  <L>TIPE: ${paymentType.toUpperCase().slice(0, 10)}</L>
+  <C>-----------------------------</C>`;
+
+      menuItems.forEach((item) => {
+        const itemName = capitalizeText(item.name_menu) || "Item";
+        const quantityText = `${cart[item.id.toString()]}x`;
+        const subtotalText = formatCurrency2(
+          calculateSubtotal(item, cart[item.id.toString()])
+        );
+
+        const itemNameLines = splitTextToLines(itemName, 18);
+
+        const formattedLine = formatReceiptLine(
+          `${quantityText} ${itemNameLines[0] || ""}`,
+          subtotalText,
+          32
+        );
+        receiptText += `\n${formattedLine}`;
+
+        if (itemNameLines.length > 1) {
+          receiptText += `\n<L>  ${itemNameLines[1]}</L>`;
+        }
+      });
+
+      receiptText += `
+  <C>-----------------------------</C>
+  <L>TOTAL:<R>${formatCurrency2(calculateTotal())}</R></L>
+  <C>=============================</C>
+  <C>*** TERIMA KASIH ***</C>
+  <C>Barang yang dibeli</C>
+  <C>tidak dapat ditukar</C>`;
 
       await BLEPrinter.printBill(receiptText, {
         cut: true,
@@ -417,7 +499,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       console.error("Print error:", error);
       throw error;
     }
-  };
+  }
 
   const getTotalItems = () => {
     return Object.values(cart).reduce((sum, qty) => sum + qty, 0);
@@ -547,7 +629,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       fontSize: isTablet ? 12 : 10,
     },
     listContainer: {
-      flexGrow: 0, // Changed to prevent taking extra space
+      flexGrow: 0,
     },
     itemInfo: {
       flex: 1,
@@ -710,6 +792,25 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
+    },
+    paymentPickerContainer: {
+      marginTop: 10,
+      padding: 5,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      backgroundColor: colors.card,
+    },
+    paymentPickerLabel: {
+      fontSize: isTablet ? 14 : 13,
+      fontWeight: "600",
+      color: colors.text,
+      padding: 8,
+      marginBottom: 8,
+    },
+    pickerItem: {
+      color: colors.text,
+      backgroundColor: colors.card,
     },
   });
 
@@ -875,10 +976,32 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
                 {formatCurrency(calculateTotal())}
               </Text>
             </View>
+
+            <View style={styles.paymentPickerContainer}>
+              <Text style={styles.paymentPickerLabel}>Tipe Pembayaran</Text>
+              <Picker
+                selectedValue={paymentType}
+                onValueChange={(itemValue: "cash" | "qris") =>
+                  setPaymentType(itemValue)
+                }
+                style={styles.picker}
+              >
+                <Picker.Item
+                  style={styles.pickerItem}
+                  label="Cash"
+                  value="cash"
+                />
+                <Picker.Item
+                  style={styles.pickerItem}
+                  label="QRIS"
+                  value="qris"
+                />
+              </Picker>
+            </View>
           </View>
 
-          <TouchableOpacity 
-            style={styles.orderButton} 
+          <TouchableOpacity
+            style={styles.orderButton}
             onPress={handleOrder}
             disabled={printing}
           >
@@ -899,7 +1022,6 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
         </>
       )}
 
-      {/* Print Modal */}
       <Modal
         animationType="slide"
         transparent={true}

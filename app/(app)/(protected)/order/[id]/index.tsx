@@ -20,7 +20,12 @@ import { useTheme } from "@/hooks/use-theme";
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { OrderDetail, OrderItem } from "@/utils/types";
-import { capitalizeText, formatCurrency, formatCurrency2, formatDatetoIndonesia } from "@/utils/format";
+import {
+  capitalizeText,
+  formatCurrency,
+  formatCurrency2,
+  formatDatetoIndonesia,
+} from "@/utils/format";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BLEPrinter } from "react-native-thermal-receipt-printer";
 import { Picker } from "@react-native-picker/picker";
@@ -305,50 +310,131 @@ export default function OrderDetailsScreen() {
 
   async function printReceipt() {
     if (!order) return;
-  
+
     // Fetch shop details from Supabase
     let shopData = null;
     const { data, error } = await supabase
       .from("shop")
       .select("name, address, phone")
       .single();
-  
+
     if (error) throw error;
     shopData = data;
-  
+
+    // Fungsi untuk memecah teks panjang menjadi beberapa baris
+    const splitLongText = (text: string, maxLength: number): string[] => {
+      const words = text.split(" ");
+      const lines: string[] = [];
+      let currentLine = words[0] || "";
+
+      for (let i = 1; i < words.length; i++) {
+        const word = words[i];
+        if (currentLine.length + word.length + 1 <= maxLength) {
+          currentLine += " " + word;
+        } else {
+          lines.push(currentLine);
+          currentLine = word;
+        }
+      }
+      lines.push(currentLine);
+      return lines;
+    };
+
+    const splitTextToLines = (
+      text: string,
+      maxLength: number,
+      maxLines: number = 2
+    ): string[] => {
+      const words = text.split(" ");
+      const lines: string[] = [];
+      let currentLine = words[0] || "";
+
+      for (let i = 1; i < words.length; i++) {
+        const word = words[i];
+        if (currentLine.length + word.length + 1 <= maxLength) {
+          currentLine += " " + word;
+        } else {
+          if (lines.length < maxLines - 1) {
+            lines.push(currentLine);
+            currentLine = word;
+          } else {
+            // Jika sudah mencapai maxLines, gabungkan sisa kata dan tambahkan ...
+            currentLine += " " + word;
+            if (currentLine.length > maxLength) {
+              currentLine = currentLine.substring(0, maxLength - 3) + "...";
+            }
+            break;
+          }
+        }
+      }
+
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+
+      return lines;
+    };
+
     // Format header (max 28 chars per line for 60mm paper)
+    const shopName = shopData.name.toUpperCase();
+    const addressLines = splitLongText(shopData.address, 32);
+    const phoneText = `Telp: ${shopData.phone}`;
+
     let receiptText = `
   <C>=============================</C>
-  <C>** ${shopData.name.slice(0, 16).toUpperCase()} **</C>
-  <C>${shopData.address.slice(0, 24)}</C>
-  <C>Telp: ${shopData.phone.slice(0, 13)}</C>
+  <C>** ${shopName.slice(0, 32)} **</C>`;
+
+    // Tambahkan setiap baris alamat
+    addressLines.forEach((line) => {
+      receiptText += `
+  <C>${line}</C>`;
+    });
+
+    receiptText += `
+  <C>${phoneText.slice(0, 32)}</C>
   <C>=============================</C>
   <L>INV: ${order.invoice_number.slice(0, 10)}</L>
   <L>TGL: ${formatDatetoIndonesia(order.created_at).slice(0, 15)}</L>
   <L>KASIR: ${(order.user?.first_name || "-").slice(0, 10)}</L>
   <C>-----------------------------</C>`;
-  
-    // Format items with menu on left and subtotal on right (fixed 18 chars for left side)
+
+    const formatReceiptLine = (
+      left: string,
+      right: string,
+      width: number = 32
+    ): string => {
+      // Hitung spasi yang dibutuhkan antara konten kiri dan kanan
+      const leftLen = left.length;
+      const rightLen = right.length;
+      const spacesNeeded = Math.max(1, width - leftLen - rightLen);
+      const spaces = " ".repeat(spacesNeeded);
+
+      return `<L>${left}${spaces}${right}</L>`;
+    };
+
     orderItems.forEach((item) => {
-      const maxLength = 24; // Panjang maksimum untuk nama item + quantity
-      const itemName = item.menu?.name_menu || "Item";
-      
-      // Format nama item dengan elipsis jika melebihi panjang maksimum
-      const formattedName = itemName.length > maxLength 
-        ? `${itemName.substring(0, maxLength - 3)}...` 
-        : itemName;
-      
-      // Gabungkan dengan quantity
-      const leftText = `${item.quantity}x ${capitalizeText(formattedName)}`;
-      
-      // Format subtotal dengan padding untuk alignment
-      const subtotal = formatCurrency2(item.subtotal).padStart(10);
-      
-      receiptText += `
-    <L>${leftText}</L>
-    <R>${subtotal}</R>`;
+      const itemName = capitalizeText(item.menu?.name_menu) || "Item";
+      const quantityText = `${item.quantity}x`;
+      const subtotalText = formatCurrency2(item.subtotal);
+
+      // Buat array untuk baris nama item
+      const itemNameLines = splitTextToLines(itemName, 18);
+
+      // Format baris item dengan fixed width
+      // Kolom kiri = 20 karakter, sisanya untuk harga
+      const formattedLine = formatReceiptLine(
+        `${quantityText} ${itemNameLines[0] || ""}`,
+        subtotalText,
+        32
+      );
+      receiptText += `\n${formattedLine}`;
+
+      // Jika nama item terlalu panjang, tampilkan di baris berikutnya
+      if (itemNameLines.length > 1) {
+        receiptText += `\n<L>  ${itemNameLines[1]}</L>`;
+      }
     });
-  
+
     receiptText += `
   <C>-----------------------------</C>
   <L>TOTAL:<R>${formatCurrency2(order.total_amount)}</R></L>
@@ -356,7 +442,7 @@ export default function OrderDetailsScreen() {
   <C>*** TERIMA KASIH ***</C>
   <C>Barang yang dibeli</C>
   <C>tidak dapat ditukar</C>`;
-  
+
     try {
       await BLEPrinter.printBill(receiptText, {
         cut: true,
