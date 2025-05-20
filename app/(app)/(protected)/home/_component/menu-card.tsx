@@ -9,7 +9,6 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
-  ScrollView,
 } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { useRouter } from "expo-router";
@@ -142,7 +141,7 @@ export default function MainCardMenu({
 
     setTimeout(() => {
       setIsAdding(null);
-    }, 300);
+    }, 100);
   };
   const handleAddMenu = () => {
     router.push("/(app)/(protected)/home/add-menu");
@@ -393,6 +392,7 @@ export default function MainCardMenu({
             source={{ uri: item.images }}
             style={styles.image}
             resizeMode="cover"
+            
           />
         </View>
 
@@ -460,11 +460,13 @@ export default function MainCardMenu({
         data={menuItems}
         renderItem={renderItem}
         keyExtractor={(item) => item.id.toString()}
-        numColumns={isTablet ? 4 : 2} // 2 columns on phone, 4 on tablet
+        numColumns={isTablet ? 4 : 2} 
         columnWrapperStyle={styles.row}
         contentContainerStyle={styles.list}
-        scrollEnabled={false}
+        scrollEnabled={true}
         extraData={cart}
+        initialNumToRender={isTablet ? 8 : 4}
+        showsVerticalScrollIndicator={false}
       />
       <MenuActionModal
         visible={modalVisible}
@@ -477,3 +479,4 @@ export default function MainCardMenu({
     </SafeAreaView>
   );
 }
+

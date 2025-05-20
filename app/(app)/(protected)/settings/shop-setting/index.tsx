@@ -22,18 +22,23 @@ export default function ShopSettingScreen() {
     name: "",
     address: "",
     phone: "",
+    wifi_name: "",
+    wifi_password: "",
   });
 
   const [editedShop, setEditedShop] = useState<Shop>({
     name: "",
     address: "",
     phone: "",
+    wifi_name: "",
+    wifi_password: "",
   });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [showWifiPassword, setShowWifiPassword] = useState(false);
 
   const nameInputRef = useRef<TextInput>(null);
 
@@ -46,7 +51,7 @@ export default function ShopSettingScreen() {
       setLoading(true);
       const { data, error } = await supabase
         .from("shop")
-        .select("id, name, address, phone")
+        .select("id, name, address, phone, wifi_name, wifi_password")
         .single();
 
       if (error) {
@@ -57,6 +62,8 @@ export default function ShopSettingScreen() {
         name: "",
         address: "",
         phone: "",
+        wifi_name: "",
+        wifi_password: "",
       };
 
       setShop(shopData);
@@ -84,7 +91,9 @@ export default function ShopSettingScreen() {
         .update({
           name: editedShop.name!.trim(),
           address: editedShop.address!.trim(),
-          phone: editedShop.phone!.trim,
+          phone: editedShop.phone!.trim(),
+          wifi_name: editedShop.wifi_name!.trim(),
+          wifi_password: editedShop.wifi_password!.trim(),
           updated_at: new Date(),
         })
         .eq("id", shop.id)
@@ -110,6 +119,7 @@ export default function ShopSettingScreen() {
       // Cancel editing, revert changes
       setEditedShop(shop);
       setIsEditing(false);
+      setShowWifiPassword(false);
     } else {
       setIsEditing(true);
       // Focus on name input after a short delay
@@ -117,6 +127,10 @@ export default function ShopSettingScreen() {
         nameInputRef.current?.focus();
       }, 100);
     }
+  };
+
+  const toggleShowWifiPassword = () => {
+    setShowWifiPassword(!showWifiPassword);
   };
 
   const styles = StyleSheet.create({
@@ -320,7 +334,7 @@ export default function ShopSettingScreen() {
               )}
             </View>
 
-            <View style={styles.lastFieldContainer}>
+            <View style={styles.fieldContainer}>
               <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <View style={styles.fieldIcon}>
                   <Feather name="phone" size={18} color={colors.primary} />
@@ -340,6 +354,50 @@ export default function ShopSettingScreen() {
                 />
               ) : (
                 <Text style={styles.value}>{shop.phone || "-"}</Text>
+              )}
+            </View>
+
+            <View style={styles.fieldContainer}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View style={styles.fieldIcon}>
+                  <Feather name="wifi" size={18} color={colors.primary} />
+                </View>
+                <Text style={styles.label}>Nama WiFi</Text>
+              </View>
+              {isEditing ? (
+                <TextInput
+                  style={styles.input}
+                  value={editedShop.wifi_name}
+                  onChangeText={(text) =>
+                    setEditedShop({ ...editedShop, wifi_name: text })
+                  }
+                  placeholder="Masukkan nama WiFi toko"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              ) : (
+                <Text style={styles.value}>{shop.wifi_name || "-"}</Text>
+              )}
+            </View>
+
+            <View style={styles.lastFieldContainer}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View style={styles.fieldIcon}>
+                  <Feather name="lock" size={18} color={colors.primary} />
+                </View>
+                <Text style={styles.label}>Password WiFi</Text>
+              </View>
+              {isEditing ? (
+                <TextInput
+                  style={styles.input}
+                  value={editedShop.wifi_password}
+                  onChangeText={(text) =>
+                    setEditedShop({ ...editedShop, wifi_password: text })
+                  }
+                  placeholder="Masukkan password WiFi"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              ) : (
+                <Text style={styles.value}>{shop.wifi_password || "-"}</Text>
               )}
             </View>
           </View>

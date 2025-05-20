@@ -13,6 +13,7 @@ import {
   Dimensions,
   PermissionsAndroid, 
 } from "react-native";
+import ImageResizer from 'react-native-image-resizer';
 import { supabase } from "@/utils/supabase";
 import { useTheme } from "@/hooks/use-theme";
 import { Feather } from "@expo/vector-icons";
@@ -157,65 +158,90 @@ export default function AddMenuScreen() {
     }
   }
 
-  const pickImage = () => {
-    const options: ImageLibraryOptions = {
-      mediaType: 'photo',
-      quality: 1,
-      selectionLimit: 1,
-    };
+  const compressImage = async (uri: string): Promise<string> => {
+  try {
+    const compressedImage = await ImageResizer.createResizedImage(
+      uri,
+      1024, // Lebar maksimum
+      1024, // Tinggi maksimum
+      'JPEG', // Format output (JPEG atau PNG)
+      50, // Kualitas (0-100)
+      0, // Rotasi (0 untuk tidak memutar)
+      undefined, // Path output (biarkan undefined untuk temporary file)
+      true // keep metadata
+    );
+    return compressedImage.uri;
+  } catch (error) {
+    console.error('Error compressing image:', error);
+    throw new Error('Gagal mengompresi gambar');
+  }
+};
 
-    launchImageLibrary(options, (response) => {
-      if (response.didCancel) {
-        console.log('User cancelled image picker');
-      } else if (response.errorCode) {
-        console.log('ImagePicker Error: ', response.errorMessage);
-        Alert.alert('Error', response.errorMessage || 'Gagal memilih gambar');
-      } else if (response.assets && response.assets.length > 0) {
-        const selectedImage: Asset = response.assets[0];
-        setImage(selectedImage.uri || null);
-      }
-    });
+  const pickImage = () => {
+  const options: ImageLibraryOptions = {
+    mediaType: 'photo',
+    quality: 1, // Kualitas awal tinggi, karena akan dikompresi setelahnya
+    selectionLimit: 1,
   };
 
+  launchImageLibrary(options, async (response) => {
+    if (response.didCancel) {
+      console.log('User cancelled image picker');
+    } else if (response.errorCode) {
+      console.log('ImagePicker Error: ', response.errorMessage);
+      Alert.alert('Error', response.errorMessage || 'Gagal memilih gambar');
+    } else if (response.assets && response.assets.length > 0) {
+      const selectedImage: Asset = response.assets[0];
+      if (selectedImage.uri) {
+        try {
+          const compressedUri = await compressImage(selectedImage.uri);
+          setImage(compressedUri);
+        } catch (error: any) {
+          Alert.alert('Error', error.message);
+        }
+      }
+    }
+  });
+};
   const uploadImage = async (uri: string) => {
-    try {
-      const response = await fetch(uri);
-      const arraybuffer = await response.arrayBuffer();
+  try {
+    const response = await fetch(uri);
+    const arraybuffer = await response.arrayBuffer();
 
-      if (arraybuffer.byteLength > 5 * 1024 * 1024) {
-        throw new Error("Ukuran file terlalu besar. Maksimal 5MB");
-      }
+    if (arraybuffer.byteLength > 5 * 1024 * 1024) {
+      throw new Error("Ukuran file terlalu besar. Maksimal 5MB");
+    }
 
-      const fileType = uri.split(".").pop()?.toLowerCase() ?? "jpeg";
-      if (!["jpeg", "png", "jpg"].includes(fileType)) {
-        throw new Error(
-          "Tipe file tidak didukung. Gunakan JPEG, PNG, atau JPG"
-        );
-      }
+    const fileType = uri.split(".").pop()?.toLowerCase() ?? "jpeg";
+    if (!["jpeg", "png", "jpg"].includes(fileType)) {
+      throw new Error(
+        "Tipe file tidak didukung. Gunakan JPEG, PNG, atau JPG"
+      );
+    }
 
-      const fileName = `menu-${Date.now()}.${fileType}`;
+    const fileName = `menu-${Date.now()}.${fileType}`;
 
-      const { data, error } = await supabase.storage
-        .from("file")
-        .upload(fileName, arraybuffer, {
-          contentType: `image/${fileType}`,
-          cacheControl: "3600",
-          upsert: false,
-        });
+    const { data, error } = await supabase.storage
+      .from("file")
+      .upload(fileName, arraybuffer, {
+        contentType: `image/${fileType}`,
+        cacheControl: "3600",
+        upsert: false,
+      });
 
-      if (error) {
-        throw new Error("Gagal mengupload gambar: " + error.message);
-      }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("file").getPublicUrl(fileName);
-
-      return publicUrl;
-    } catch (error: any) {
+    if (error) {
       throw new Error("Gagal mengupload gambar: " + error.message);
     }
-  };
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("file").getPublicUrl(fileName);
+
+    return publicUrl;
+  } catch (error: any) {
+    throw new Error("Gagal mengupload gambar: " + error.message);
+  }
+};
 
   const validateForm = (): boolean => {
     try {

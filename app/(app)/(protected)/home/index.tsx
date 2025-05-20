@@ -1,5 +1,11 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Dimensions, FlatList } from "react-native";
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Dimensions,
+  FlatList,
+} from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import MainCardMenu from "./_component/menu-card";
 import TypeCard from "./_component/type-card";
@@ -87,17 +93,11 @@ export default function HomeScreen() {
 
           {/* Scrollable MainCardMenu */}
           <View style={styles.contentArea}>
-            <ScrollView
-              style={styles.cardMenuContainer}
-              contentContainerStyle={styles.contentContainer}
-              showsVerticalScrollIndicator={false}
-            >
-              <MainCardMenu
-                selectedCategory={selectedCategory}
-                cart={cart}
-                setCart={setCart}
-              />
-            </ScrollView>
+            <MainCardMenu
+              selectedCategory={selectedCategory}
+              cart={cart}
+              setCart={setCart}
+            />
           </View>
 
           {/* InvoiceCart */}

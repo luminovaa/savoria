@@ -370,7 +370,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     try {
       const { data: shopData, error: shopError } = await supabase
         .from("shop")
-        .select("name, address, phone")
+        .select("name, address, phone, wifi_name, wifi_password")
         .single();
 
       if (shopError) throw shopError;
@@ -489,6 +489,18 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   <C>*** TERIMA KASIH ***</C>
   <C>Barang yang dibeli</C>
   <C>tidak dapat ditukar</C>`;
+
+      if (shopData.wifi_name) {
+        receiptText += `
+  <C>-----------------------------</C>
+  <C>WiFi Toko</C>
+  <C>${shopData.wifi_name.slice(0, 32)}</C>`;
+
+        if (shopData.wifi_password) {
+          receiptText += `
+    <C>Password: ${shopData.wifi_password.slice(0, 32)}</C>`;
+        }
+      }
 
       await BLEPrinter.printBill(receiptText, {
         cut: true,
