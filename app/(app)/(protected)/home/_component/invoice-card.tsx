@@ -14,14 +14,18 @@ import {
   Platform,
   Linking,
   Alert,
+  TextInput,
 } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { supabase } from "@/utils/supabase";
+import FastImage from "react-native-fast-image";
 import {
   capitalizeText,
   formatCurrency,
   formatCurrency2,
   formatDatetoIndonesia,
+  formatDatetoIndonesia2,
+  parseCurrency,
 } from "@/utils/format";
 import { Feather } from "@expo/vector-icons";
 import { BLEPrinter } from "react-native-thermal-receipt-printer";
@@ -54,6 +58,8 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const [printing, setPrinting] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentType, setPaymentType] = useState<"cash" | "qris">("cash");
+  const [paidAmount, setPaidAmount] = useState<number | null>(null);
+  const [changes, setChanges] = useState<number | null>(null);
 
   useEffect(() => {
     generateUniqueInvoiceNumber();
@@ -135,9 +141,48 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     });
   };
 
-  const generateRandomInvoiceNumber = () => {
-    const randomNum = Math.floor(100000 + Math.random() * 900000);
-    return `INV-${randomNum}`;
+  const generateSequentialInvoiceNumber = async () => {
+    try {
+      // Dapatkan tanggal sekarang
+      const now = new Date();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const day = String(now.getDate()).padStart(2, "0");
+
+      // Format tanggal untuk pencarian di database (YYYY-MM-DD)
+      const today = now.toISOString().split("T")[0];
+
+      // Cari invoice terakhir hari ini
+      const { data: lastInvoice, error } = await supabase
+        .from("orders")
+        .select("invoice_number, created_at")
+        .gte("created_at", `${today}T00:00:00`)
+        .lte("created_at", `${today}T23:59:59`)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      let sequenceNumber = 1;
+
+      // Jika ada invoice hari ini, ekstrak nomor urut terakhir
+      if (lastInvoice && lastInvoice.length > 0) {
+        const lastInvoiceNumber = lastInvoice[0].invoice_number;
+        const lastSequence = parseInt(lastInvoiceNumber.split("-")[2]);
+        if (!isNaN(lastSequence)) {
+          sequenceNumber = lastSequence + 1;
+        }
+      }
+
+      // Format sequence number dengan 2 digit
+      const sequenceStr = String(sequenceNumber).padStart(2, "0");
+
+      return `INV-${month}${day}-${sequenceStr}`; // Saya menambahkan hyphen (-) untuk memisahkan tanggal dan sequence
+    } catch (error) {
+      console.error("Error generating invoice number:", error);
+      // Fallback ke random number jika error
+      const randomNum = Math.floor(100000 + Math.random() * 900000);
+      return `INV-${randomNum}`;
+    }
   };
 
   const generateUniqueInvoiceNumber = async () => {
@@ -145,7 +190,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     let proposedInvoiceNumber = "";
 
     while (!isUnique) {
-      proposedInvoiceNumber = generateRandomInvoiceNumber();
+      proposedInvoiceNumber = await generateSequentialInvoiceNumber();
       const { data, error } = await supabase
         .from("orders")
         .select("id")
@@ -311,10 +356,12 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       await BLEPrinter.connectPrinter(inner_mac_address);
 
       // Print receipt first
-      await printReceipt();
 
       // After successful printing, insert data into database
       const total = calculateTotal();
+      const changesAmount = paidAmount ? paidAmount - total : 0;
+
+      await printReceipt(total, paidAmount, changesAmount);
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -327,6 +374,8 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
           invoice_number: invoiceNumber,
           total: Object.values(cart).reduce((sum, qty) => sum + qty, 0),
           total_amount: total,
+          paid: paidAmount,
+          changes: changesAmount,
           user_id: profileId,
           payment_type: paymentType,
           status: "completed",
@@ -357,6 +406,11 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       // Clear cart and close modal on success
       setModalVisible(false);
       setCart({});
+      setPaidAmount(null);
+      setChanges(null);
+      
+      const newInvoiceNumber = await generateSequentialInvoiceNumber();
+      setInvoiceNumber(newInvoiceNumber);
       Alert.alert("Sukses", "Struk berhasil dicetak dan pesanan tersimpan");
     } catch (error) {
       console.error("Print or database error:", error);
@@ -366,7 +420,11 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     }
   };
 
-  async function printReceipt() {
+  async function printReceipt(
+    total: number,
+    paid: number | null,
+    changes: number | null
+  ) {
     try {
       const { data: shopData, error: shopError } = await supabase
         .from("shop")
@@ -457,7 +515,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   <C>${phoneText.slice(0, 32)}</C>
   <C>=============================</C>
   <L>INV: ${invoiceNumber.slice(0, 10)}</L>
-  <L>TGL: ${formatDatetoIndonesia(new Date().toISOString()).slice(0, 15)}</L>
+  <L>TGL: ${formatDatetoIndonesia(new Date().toISOString())} - ${formatDatetoIndonesia2(new Date().toISOString())} </L>
   <L>TIPE: ${paymentType.toUpperCase().slice(0, 10)}</L>
   <C>-----------------------------</C>`;
 
@@ -481,20 +539,28 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
           receiptText += `\n<L>  ${itemNameLines[1]}</L>`;
         }
       });
+  receiptText += `
+<C>-----------------------------</C>
+<L>TOTAL:<R>${formatCurrency2(total)}</R></L>`;
+      if (paid !== null) {
+        receiptText += `
+<L>DIBAYAR:<R>${formatCurrency2(paid)}</R></L>`;
+        if (changes! > 0) {
+          receiptText += `
+<C>-----------------------------</C>
+<L>KEMBALI:<R>${formatCurrency2(changes || 0)}</R></L>`;
+        }
+      }
 
       receiptText += `
-  <C>-----------------------------</C>
-  <L>TOTAL:<R>${formatCurrency2(calculateTotal())}</R></L>
-  <C>=============================</C>
-  <C>*** TERIMA KASIH ***</C>
-  <C>Barang yang dibeli</C>
-  <C>tidak dapat ditukar</C>`;
-
+<C>=============================</C>
+<C>*** TERIMA KASIH ***</C>
+<C>Barang yang dibeli</C>
+<C>tidak dapat ditukar</C>`;
       if (shopData.wifi_name) {
         receiptText += `
   <C>-----------------------------</C>
-  <C>WiFi Toko</C>
-  <C>${shopData.wifi_name.slice(0, 32)}</C>`;
+  <C>Wifi: ${shopData.wifi_name.slice(0, 32)}</C>`;
 
         if (shopData.wifi_password) {
           receiptText += `
@@ -585,7 +651,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     },
     container: {
       flex: 1,
-      paddingHorizontal: isTablet ? 15 : 10,
+      paddingHorizontal: isTablet ? 0 : 10,
     },
     header: {
       flexDirection: "row",
@@ -805,24 +871,50 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       justifyContent: "center",
       alignItems: "center",
     },
+    paymentTypeContainer: {
+      marginTop: 15,
+    },
+    paymentTypeLabel: {
+      fontSize: isTablet ? 14 : 13,
+      fontWeight: "600",
+      color: colors.text,
+      marginBottom: 8,
+    },
     paymentPickerContainer: {
-      marginTop: 10,
-      padding: 5,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 8,
       backgroundColor: colors.card,
     },
-    paymentPickerLabel: {
-      fontSize: isTablet ? 14 : 13,
-      fontWeight: "600",
-      color: colors.text,
-      padding: 8,
-      marginBottom: 8,
-    },
+
     pickerItem: {
       color: colors.text,
       backgroundColor: colors.card,
+    },
+    paymentInputContainer: {
+      marginTop: 15,
+      marginBottom: 10,
+    },
+    paymentLabel: {
+      fontSize: isTablet ? 15 : 16,
+      fontWeight: "700",
+      color: colors.text,
+      marginBottom: 8,
+    },
+    paymentInput: {
+      borderWidth: 1,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: isTablet ? 15 : 14,
+      color: colors.text,
+      backgroundColor: colors.card,
+    },
+    changesText: {
+      marginTop: 8,
+      fontSize: isTablet ? 14 : 13,
+      color: colors.text,
+      fontWeight: "bold",
+      textAlign: "right",
     },
   });
 
@@ -896,11 +988,21 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
                         style={styles.itemImage}
                         resizeMode="cover"
                       />
+
+                      {/* <FastImage
+                        source={{
+                          uri: item.images,
+                          priority: FastImage.priority.normal,
+                          cache: FastImage.cacheControl.immutable,
+                        }}
+                        style={styles.itemImage}
+                        resizeMode={FastImage.resizeMode.cover}
+                      /> */}
                     </View>
                     <View style={styles.itemInfo}>
                       <View style={styles.itemNameContainer}>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.itemName} numberOfLines={2}>
+                          <Text style={styles.itemName} numberOfLines={3}>
                             {capitalizeText(item.name_menu)}
                           </Text>
                           {isPromo ? (
@@ -981,34 +1083,63 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
               <Text style={styles.subtotalText}>Total Item</Text>
               <Text style={styles.subtotalAmount}>{getTotalItems()}</Text>
             </View>
-
             <View style={styles.totalRow}>
               <Text style={styles.totalText}>Total</Text>
               <Text style={styles.totalAmount}>
                 {formatCurrency(calculateTotal())}
               </Text>
             </View>
-
-            <View style={styles.paymentPickerContainer}>
-              <Text style={styles.paymentPickerLabel}>Tipe Pembayaran</Text>
-              <Picker
-                selectedValue={paymentType}
-                onValueChange={(itemValue: "cash" | "qris") =>
-                  setPaymentType(itemValue)
-                }
-                style={styles.picker}
-              >
-                <Picker.Item
-                  style={styles.pickerItem}
-                  label="Cash"
-                  value="cash"
-                />
-                <Picker.Item
-                  style={styles.pickerItem}
-                  label="QRIS"
-                  value="qris"
-                />
-              </Picker>
+            <View style={styles.paymentInputContainer}>
+              <Text style={styles.paymentLabel}>Bayar</Text>
+              <TextInput
+                style={[styles.paymentInput, { borderColor: colors.border }]}
+                value={paidAmount ? formatCurrency(paidAmount) : ""}
+                onChangeText={(text) => {
+                  const num = parseCurrency(text);
+                  setPaidAmount(num > 0 ? num : null);
+                  if (num > 0) {
+                    setChanges(num - calculateTotal());
+                  } else {
+                    setChanges(null);
+                  }
+                }}
+                keyboardType="numeric"
+                placeholder="Masukkan jumlah bayar"
+                placeholderTextColor={colors.textSecondary}
+              />
+              {changes !== null && changes >= 0 && (
+                <Text style={styles.changesText}>
+                  Kembalian: {formatCurrency(changes)}
+                </Text>
+              )}
+              {changes !== null && changes < 0 && (
+                <Text style={[styles.changesText, { color: colors.error }]}>
+                  Kurang: {formatCurrency(Math.abs(changes))}
+                </Text>
+              )}
+            </View>
+            <View style={styles.paymentTypeContainer}>
+              <Text style={styles.paymentTypeLabel}>Tipe Pembayaran</Text>
+              <View style={styles.paymentPickerContainer}>
+                <Picker
+                  selectedValue={paymentType}
+                  onValueChange={(itemValue: "cash" | "qris") =>
+                    setPaymentType(itemValue)
+                  }
+                  style={styles.picker}
+                >
+                  <Picker.Item
+                    style={styles.pickerItem}
+                    label="Cash"
+                    value="cash"
+                  />
+                  <Picker.Item
+                    style={styles.pickerItem}
+                    label="QRIS"
+                    value="qris"
+                  />
+                </Picker>
+              </View>
             </View>
           </View>
 

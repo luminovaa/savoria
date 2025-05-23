@@ -42,6 +42,7 @@
     "react-icons": "^5.5.0",
     "react-native": "0.76.9",
     "react-native-device-info": "^14.0.4",
+    "react-native-fast-image": "^8.6.3",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-image-picker": "^8.2.0",
     "react-native-image-resizer": "^1.4.5",

@@ -12,6 +12,13 @@ export const formatDatetoIndonesia = (dateString: string) => {
       year: "numeric",
     });
   };
+export const formatDatetoIndonesia2 = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 export const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("id-ID", {
         style: "currency",

@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
+import FastImage from 'react-native-fast-image';
+
 import { useTheme } from "@/hooks/use-theme";
 import { useRouter } from "expo-router";
 import { supabase } from "@/utils/supabase";
@@ -118,6 +120,20 @@ export default function MainCardMenu({
   useEffect(() => {
     fetchMenuItems();
   }, [selectedCategory]);
+
+  useEffect(() => {
+  const prefetchImages = async () => {
+    const uris = menuItems
+      .filter(item => item.id !== 0 && item.images)
+      .map(item => ({ uri: item.images }));
+    
+    FastImage.preload(uris);
+  };
+
+  if (menuItems.length > 0) {
+    prefetchImages();
+  }
+}, [menuItems]);
 
   const updateQuantity = (id: string, delta: number) => {
     setCart((prevCart) => {
@@ -229,7 +245,7 @@ export default function MainCardMenu({
     },
     card: {
       borderRadius: 12,
-      width: isTablet ? "23.8%" : "48%", // 2 cards per row on phone, 4 on tablet
+      width: isTablet ? "23.8%" : "48%",
       overflow: "hidden",
       borderWidth: 1,
       borderColor: colors.border,
@@ -388,12 +404,21 @@ export default function MainCardMenu({
         )}
 
         <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: item.images }}
-            style={styles.image}
-            resizeMode="cover"
-            
-          />
+      <Image
+        source={{ uri: item.images }}
+        style={styles.image}
+        resizeMode="cover"
+      />
+
+{/* <FastImage
+  source={{
+    uri: item.images,
+    priority: FastImage.priority.normal,
+    cache: FastImage.cacheControl.immutable,
+  }}
+  style={styles.image}
+  resizeMode={FastImage.resizeMode.cover}
+/> */}
         </View>
 
         <View style={styles.contentContainer}>
@@ -479,4 +504,3 @@ export default function MainCardMenu({
     </SafeAreaView>
   );
 }
-

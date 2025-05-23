@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   RefreshControl,
   Dimensions,
-  ScrollView,
 } from "react-native";
 import { supabase } from "@/utils/supabase";
 import { useTheme } from "@/hooks/use-theme";
@@ -31,7 +30,6 @@ export default function OrderHistoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
-  const [userRole, setUserRole] = useState<string | null>(null); // State untuk menyimpan role pengguna
   const LIMIT = 10;
 
   const currentDate = new Date();
@@ -41,39 +39,8 @@ export default function OrderHistoryScreen() {
   const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
   const isTablet = SCREEN_WIDTH > 600;
 
-  // Fungsi untuk mengambil role pengguna
-  const fetchUserRole = useCallback(async () => {
-    try {
-      // Ambil data pengguna yang sedang login
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) throw new Error("Gagal mendapatkan data pengguna");
-
-      // Ambil data profil pengguna berdasarkan user.id
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("role_id")
-        .eq("id", user.id)
-        .single();
-
-      if (profileError || !profile) throw new Error("Gagal mendapatkan data profil");
-
-      // Ambil nama role dari tabel role berdasarkan role_id
-      const { data: role, error: roleError } = await supabase
-        .from("role")
-        .select("name")
-        .eq("id", profile.role_id)
-        .single();
-
-      if (roleError || !role) throw new Error("Gagal mendapatkan data role");
-
-      setUserRole(role.name);
-    } catch (error: any) {
-      setError(error.message);
-      Alert.alert("Error", "Gagal memuat data role pengguna");
-    }
-  }, []);
-
   const stats = useMemo(() => {
+    
     if (!allOrders.length) {
       return {
         todayOrders: 0,
@@ -89,7 +56,9 @@ export default function OrderHistoryScreen() {
     const todayOrdersArray = allOrders.filter(order => {
       const orderDate = new Date(order.created_at);
       orderDate.setHours(0, 0, 0, 0);
-      return orderDate.getTime() === today.getTime() && order.status.toLowerCase() !== 'cancelled';
+      const isToday = orderDate.getTime() === today.getTime();
+      const isNotCancelled = order.status.toLowerCase() !== 'cancelled';
+      return isToday && isNotCancelled;
     });
 
     const todayRevenue = todayOrdersArray.reduce((sum, order) => 
@@ -114,12 +83,14 @@ export default function OrderHistoryScreen() {
     const yearlyRevenue = yearlyOrdersArray.reduce((sum, order) => 
       sum + (order.total_amount || 0), 0);
 
-    return {
+    const result = {
       todayOrders: todayOrdersArray.length,
       todayRevenue,
       monthlyRevenue,
       yearlyRevenue
     };
+
+    return result;
   }, [allOrders, selectedMonth, selectedYear]);
 
   const fetchAllOrders = useCallback(async () => {
@@ -131,14 +102,20 @@ export default function OrderHistoryScreen() {
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching all orders:', error);
+        throw error;
+      }
 
       const orderData = data || [];
       
       setAllOrders(orderData);
+      return orderData;
     } catch (error: any) {
+      console.error('fetchAllOrders error:', error);
       setError(error.message);
       Alert.alert("Error", "Gagal memuat data pesanan");
+      return [];
     }
   }, []);
 
@@ -211,20 +188,33 @@ export default function OrderHistoryScreen() {
     }
   }, [selectedMonth, selectedYear]);
 
+  // Initial load - fetch all orders first, then filtered orders
   useEffect(() => {
-    fetchUserRole(); // Panggil fungsi untuk mengambil role pengguna saat komponen dimuat
-    fetchAllOrders();
-  }, [fetchAllOrders, fetchUserRole]);
+    const loadInitialData = async () => {
+      // Fetch all orders first for stats
+      await fetchAllOrders();
+      // Then fetch filtered orders for display
+      await fetchOrders(0, true);
+    };
+    
+    loadInitialData();
+  }, []); // Only run once on mount
 
+  // When month/year changes, only fetch filtered orders (allOrders already loaded)
   useEffect(() => {
-    fetchOrders(0, true);
-  }, [fetchOrders, selectedMonth, selectedYear]);
+    if (allOrders.length > 0) { // Only if we already have all orders loaded
+      fetchOrders(0, true);
+    }
+  }, [selectedMonth, selectedYear]);
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     setHasMore(true);
-    fetchAllOrders();
-    fetchOrders(0, true);
+    
+    // Fetch all orders first for updated stats
+    await fetchAllOrders();
+    // Then fetch filtered orders
+    await fetchOrders(0, true);
   }, [fetchOrders, fetchAllOrders]);
 
   const handleLoadMore = useCallback(() => {
@@ -609,7 +599,7 @@ export default function OrderHistoryScreen() {
       {renderMonthPicker()}
       
       {/* Statistics Cards - Hanya ditampilkan jika role adalah 'Owner' */}
-      {userRole === "Owner" && renderStatCards()}
+      {renderStatCards()}
 
       {/* Order List */}
       <View style={styles.listContainer}>

@@ -162,7 +162,7 @@ export default function AddMenuScreen() {
   try {
     const compressedImage = await ImageResizer.createResizedImage(
       uri,
-      1024, // Lebar maksimum
+      1024,
       1024, // Tinggi maksimum
       'JPEG', // Format output (JPEG atau PNG)
       50, // Kualitas (0-100)

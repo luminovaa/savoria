@@ -60,6 +60,16 @@ export default function SettingScreen() {
             styles={styles}
           />
 
+{/* < SettingItem
+            icon="users"
+            title="Member"
+            description="Pengaturan Member"
+            onPress={() =>
+              router.push("/(app)/(protected)/settings/member")
+            }
+            colors={colors}
+            styles={styles}
+          /> */}
           <SettingItem
             icon="globe"
             title="Bahasa"

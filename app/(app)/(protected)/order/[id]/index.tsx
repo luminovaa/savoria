@@ -25,6 +25,7 @@ import {
   formatCurrency,
   formatCurrency2,
   formatDatetoIndonesia,
+  formatDatetoIndonesia2,
 } from "@/utils/format";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BLEPrinter } from "react-native-thermal-receipt-printer";
@@ -58,12 +59,7 @@ export default function OrderDetailsScreen() {
     if (id) {
       fetchOrderDetails(id as string);
     }
-    return () => {
-      // Cleanup: Close printer connection on component unmount
-      BLEPrinter.closeConn().catch((err) =>
-        console.error("Close connection error:", err)
-      );
-    };
+    
   }, [id]);
 
   const fetchOrderDetails = async (orderId: string) => {
@@ -394,7 +390,7 @@ export default function OrderDetailsScreen() {
   <C>${phoneText.slice(0, 32)}</C>
   <C>=============================</C>
   <L>INV: ${order.invoice_number.slice(0, 10)}</L>
-  <L>TGL: ${formatDatetoIndonesia(order.created_at).slice(0, 15)}</L>
+  <L>TGL: ${formatDatetoIndonesia(order.created_at)} - ${formatDatetoIndonesia2(order.created_at)}</L>
   <L>KASIR: ${(order.user?.first_name || "-").slice(0, 10)}</L>
   <C>-----------------------------</C>`;
 
@@ -434,14 +430,24 @@ export default function OrderDetailsScreen() {
         receiptText += `\n<L>  ${itemNameLines[1]}</L>`;
       }
     });
-
-    receiptText += `
-  <C>-----------------------------</C>
-  <L>TOTAL:<R>${formatCurrency2(order.total_amount)}</R></L>
-  <C>=============================</C>
-  <C>*** TERIMA KASIH ***</C>
-  <C>Barang yang dibeli</C>
-  <C>tidak dapat ditukar</C>`;
+  receiptText += `
+<C>-----------------------------</C>
+<L>TOTAL:<R>${formatCurrency2(order.total_amount)}</R></L>`;
+     if (order.paid !== null) {
+            receiptText += `
+    <L>DIBAYAR:<R>${formatCurrency2(order.paid)}</R></L>`;
+            if (order.changes! > 0) {
+              receiptText += `
+<C>-----------------------------</C>
+<L>KEMBALI:<R>${formatCurrency2(order.changes || 0)}</R></L>`;
+            }
+          }
+    
+          receiptText += `
+<C>=============================</C>
+<C>*** TERIMA KASIH ***</C>
+<C>Barang yang dibeli</C>
+<C>tidak dapat ditukar</C>`;
   
     if (shopData.wifi_name) {
       receiptText += `
