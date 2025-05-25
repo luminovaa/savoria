@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, memo } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import FastImage from 'react-native-fast-image';
+import FastImage from "react-native-fast-image";
 
 import { useTheme } from "@/hooks/use-theme";
 import { useRouter } from "expo-router";
@@ -20,6 +20,8 @@ import { capitalizeText, formatCurrency } from "@/utils/format";
 import { Feather } from "@expo/vector-icons";
 import MenuActionModal from "./modal-menu";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { debounce } from "lodash";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const isTablet = SCREEN_WIDTH > 600;
@@ -43,55 +45,20 @@ export default function MainCardMenu({
   const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(
     null
   );
-  const [isAdding, setIsAdding] = useState<string | null>(null); 
+  const [isAdding, setIsAdding] = useState<string | null>(null);
 
   const fetchMenuItems = async () => {
-    try {
-      setLoading(true);
-      let query = supabase
-        .from("menu")
-        .select("*")
-        .eq("is_deleted", false)
-        .eq("is_archive", false);
+  try {
+    setLoading(true);
 
-      if (selectedCategory) {
-        query = query.eq("category_id", selectedCategory);
-      } else {
-        query = query.order("created_at", { ascending: false });
-      }
+    // Cek cache
+    const cachedItems = await AsyncStorage.getItem("menuItemsCache");
+    const cachedMenuItems = cachedItems ? JSON.parse(cachedItems) : {};
+    const cacheKey = selectedCategory ? `category_${selectedCategory}` : "all";
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      const currentDate = new Date();
-      const wibOffset = 7 * 60;
-      const wibDate = new Date(
-        currentDate.getTime() +
-          (wibOffset - currentDate.getTimezoneOffset()) * 60 * 1000
-      );
-
-      const normalizeDate = (date: Date) => {
-        return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      };
-
-      const items = (data || []).filter((item: MenuItem) => {
-        if (!item.promo || !item.promo_start || !item.promo_end) {
-          return true;
-        }
-
-        const promoStart = normalizeDate(new Date(item.promo_start));
-        const promoEnd = normalizeDate(new Date(item.promo_end));
-        const normalizedCurrentDate = normalizeDate(wibDate);
-
-        return (
-          normalizedCurrentDate >= promoStart &&
-          normalizedCurrentDate <= promoEnd
-        );
-      });
-
+    if (cachedMenuItems[cacheKey]) {
       setMenuItems([
-        ...items,
+        ...cachedMenuItems[cacheKey],
         {
           id: 0,
           name_menu: "Tambah Menu",
@@ -110,12 +77,79 @@ export default function MainCardMenu({
           is_archive: false,
         },
       ]);
-    } catch (error) {
-      console.error("Error fetching menu items:", error);
-    } finally {
       setLoading(false);
+      return;
     }
-  };
+
+    let query = supabase
+      .from("menu")
+      .select("id, name_menu, price, promo, promo_price, promo_start, promo_end, images, category_id, created_at, updated_at, is_deleted, is_archive")
+      .eq("is_deleted", false)
+      .eq("is_archive", false);
+
+    if (selectedCategory) {
+      query = query.eq("category_id", selectedCategory);
+    } else {
+      query = query.order("created_at", { ascending: false });
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const currentDate = new Date();
+    const wibOffset = 7 * 60;
+    const wibDate = new Date(
+      currentDate.getTime() +
+        (wibOffset - currentDate.getTimezoneOffset()) * 60 * 1000
+    );
+
+    const normalizeDate = (date: Date) => {
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    };
+
+    const items = (data || []).filter((item: MenuItem) => {
+      if (!item.promo || !item.promo_start || !item.promo_end) {
+        return true;
+      }
+      const promoStart = normalizeDate(new Date(item.promo_start));
+      const promoEnd = normalizeDate(new Date(item.promo_end));
+      const normalizedCurrentDate = normalizeDate(wibDate);
+      return (
+        normalizedCurrentDate >= promoStart &&
+        normalizedCurrentDate <= promoEnd
+      );
+    });
+
+    // Simpan ke cache
+    cachedMenuItems[cacheKey] = items;
+    await AsyncStorage.setItem("menuItemsCache", JSON.stringify(cachedMenuItems));
+
+    setMenuItems([
+      ...items,
+      {
+        id: 0,
+        name_menu: "Tambah Menu",
+        description: "",
+        price: 0,
+        category_id: 0,
+        images: "",
+        promo: false,
+        promo_price: null,
+        promo_start: null,
+        promo_end: null,
+        created_at: "",
+        updated_at: "",
+        isAddButton: true,
+        is_deleted: false,
+        is_archive: false,
+      },
+    ]);
+  } catch (error) {
+    console.error("Error fetching menu items:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchMenuItems();
@@ -124,9 +158,14 @@ export default function MainCardMenu({
   useEffect(() => {
   const prefetchImages = async () => {
     const uris = menuItems
-      .filter(item => item.id !== 0 && item.images)
-      .map(item => ({ uri: item.images }));
-    
+      .filter((item) => item.id !== 0 && item.images)
+      .slice(0, 8) 
+      .map((item) => ({
+        uri: item.images,
+        priority: FastImage.priority.low,
+        cache: FastImage.cacheControl.immutable,
+      }));
+
     FastImage.preload(uris);
   };
 
@@ -159,6 +198,7 @@ export default function MainCardMenu({
       setIsAdding(null);
     }, 100);
   };
+  
   const handleAddMenu = () => {
     router.push("/(app)/(protected)/home/add-menu");
   };
@@ -301,7 +341,7 @@ export default function MainCardMenu({
       color: colors.text,
     },
     name: {
-      fontSize: isTablet? 13 : 16,
+      fontSize: isTablet ? 13 : 16,
       fontWeight: "600",
       marginBottom: 4,
       color: colors.text,
@@ -371,105 +411,141 @@ export default function MainCardMenu({
       color: colors.text,
     },
   });
+  type RenderItemProps = {
+    item: MenuItem;
+    cart: { [id: string]: number };
+    colors: any;
+    styles: any;
+    updateQuantity: (id: string, delta: number) => void;
+    addToCart: (id: string) => void;
+    handleAddMenu: () => void;
+    handleLongPress: (
+      item: MenuItem,
+      event: { nativeEvent: { pageX: number; pageY: number } }
+    ) => void;
+    isAdding: string | null;
+  };
+  const RenderItem = memo(
+    ({
+      item,
+      cart,
+      colors,
+      styles,
+      updateQuantity,
+      addToCart,
+      handleAddMenu,
+      handleLongPress,
+      isAdding,
+    }: RenderItemProps) => {
+      if (item.id === 0) {
+        return (
+          <TouchableOpacity
+            style={styles.addButtonCard}
+            onPress={handleAddMenu}
+          >
+            <View style={styles.addIconContainer}>
+              <Feather
+                name="plus"
+                width={30}
+                height={30}
+                style={styles.addIcon}
+              />
+            </View>
+            <Text style={styles.addText}>Tambah Menu</Text>
+          </TouchableOpacity>
+        );
+      }
 
-  const renderItem = ({ item }: { item: MenuItem }) => {
-    if (item.id === 0) {
+      const quantity = cart[item.id.toString()] || 0;
+      const hasPromo = item.promo && item.promo_price !== null;
+
       return (
-        <TouchableOpacity style={styles.addButtonCard} onPress={handleAddMenu}>
-          <View style={styles.addIconContainer}>
-            <Feather
-              name="plus"
-              width={30}
-              height={30}
-              style={styles.addIcon}
-            />
+        <TouchableOpacity
+          style={styles.card}
+          onLongPress={(event) => handleLongPress(item, event)}
+        >
+          {hasPromo && (
+            <View style={styles.labelPromo}>
+              <Text style={styles.labelPromoText}>PROMO</Text>
+            </View>
+          )}
+          <View style={styles.imageContainer}>
+            {/* <Image
+              source={{ uri: item.images }}
+              style={styles.image}
+              resizeMode="cover"
+            /> */}
+            <FastImage
+          source={{
+            uri: item.images,
+            priority: FastImage.priority.low,
+            cache: FastImage.cacheControl.immutable,
+          }}
+          style={styles.image}
+          resizeMode={FastImage.resizeMode.cover}
+        />
           </View>
-          <Text style={styles.addText}>Tambah Menu</Text>
+          <View style={styles.contentContainer}>
+            <Text style={styles.name} numberOfLines={2}>
+              {capitalizeText(item.name_menu)}
+            </Text>
+            <View style={styles.priceContainer}>
+              {hasPromo ? (
+                <>
+                  <Text style={styles.originalPrice}>
+                    {formatCurrency(item.price)}
+                  </Text>
+                  <Text style={styles.promoPrice}>
+                    {formatCurrency(item.promo_price!)}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.price}>{formatCurrency(item.price)}</Text>
+              )}
+            </View>
+            {quantity > 0 ? (
+              <View style={styles.quantityContainer}>
+                <TouchableOpacity
+                  onPress={() => updateQuantity(item.id.toString(), -1)}
+                  style={styles.quantityButton}
+                >
+                  <Feather
+                    name="minus"
+                    width={18}
+                    height={18}
+                    color={colors.primary}
+                  />
+                </TouchableOpacity>
+                <Text style={styles.quantity}>{quantity}</Text>
+                <TouchableOpacity
+                  onPress={() => updateQuantity(item.id.toString(), 1)}
+                  style={styles.quantityButton}
+                >
+                  <Feather
+                    name="plus"
+                    width={18}
+                    height={18}
+                    color={colors.primary}
+                  />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={() => addToCart(item.id.toString())}
+                style={[
+                  styles.addButton,
+                  isAdding === item.id.toString() && { opacity: 0.5 },
+                ]}
+                disabled={isAdding === item.id.toString()}
+              >
+                <Text style={styles.addButtonText}>Tambah</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </TouchableOpacity>
       );
     }
-
-    const quantity = cart[item.id.toString()] || 0;
-    const hasPromo = item.promo && item.promo_price !== null;
-
-    return (
-      <TouchableOpacity
-        style={styles.card}
-        onLongPress={(event) => handleLongPress(item, event)}
-      >
-        {hasPromo && (
-          <View style={styles.labelPromo}>
-            <Text style={styles.labelPromoText}>PROMO</Text>
-          </View>
-        )}
-
-        <View style={styles.imageContainer}>
-      <Image
-        source={{ uri: item.images }}
-        style={styles.image}
-        resizeMode="cover"
-      />
-
-{/* <FastImage
-  source={{
-    uri: item.images,
-    priority: FastImage.priority.normal,
-    cache: FastImage.cacheControl.immutable,
-  }}
-  style={styles.image}
-  resizeMode={FastImage.resizeMode.cover}
-/> */}
-        </View>
-
-        <View style={styles.contentContainer}>
-          <Text style={styles.name} numberOfLines={2}>
-            {capitalizeText(item.name_menu)}
-          </Text>
-
-          <View style={styles.priceContainer}>
-            {hasPromo ? (
-              <>
-                <Text style={styles.originalPrice}>
-                  {formatCurrency(item.price)}
-                </Text>
-                <Text style={styles.promoPrice}>
-                  {formatCurrency(item.promo_price!)}
-                </Text>
-              </>
-            ) : (
-              <Text style={styles.price}>{formatCurrency(item.price)}</Text>
-            )}
-          </View>
-
-          {quantity > 0 ? (
-          <View style={styles.quantityContainer}>
-            <TouchableOpacity
-              onPress={() => updateQuantity(item.id.toString(), -1)}
-              style={styles.quantityButton}
-            >
-              <Feather name="minus" width={18} height={18} color={colors.primary} />
-            </TouchableOpacity>
-            <Text style={styles.quantity}>{quantity}</Text>
-            <TouchableOpacity
-              onPress={() => updateQuantity(item.id.toString(), 1)}
-              style={styles.quantityButton}
-            >
-              <Feather name="plus" width={18} height={18} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity
-            onPress={() => addToCart(item.id.toString())}
-            style={[styles.addButton, isAdding === item.id.toString() && { opacity: 0.5 }]}
-            disabled={isAdding === item.id.toString()}
-          >
-            <Text style={styles.addButtonText}>Tambah</Text>
-          </TouchableOpacity>
-        )}
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  );
 
   if (loading) {
     return (
@@ -483,15 +559,30 @@ export default function MainCardMenu({
     <SafeAreaView style={styles.container}>
       <FlatList
         data={menuItems}
-        renderItem={renderItem}
+        renderItem={({ item }) => (
+          <RenderItem
+            item={item}
+            cart={cart}
+            colors={colors}
+            styles={styles}
+            updateQuantity={updateQuantity}
+            addToCart={addToCart}
+            handleAddMenu={handleAddMenu}
+            handleLongPress={handleLongPress}
+            isAdding={isAdding}
+          />
+        )}
         keyExtractor={(item) => item.id.toString()}
-        numColumns={isTablet ? 4 : 2} 
+        numColumns={isTablet ? 4 : 2}
         columnWrapperStyle={styles.row}
         contentContainerStyle={styles.list}
         scrollEnabled={true}
         extraData={cart}
-        initialNumToRender={isTablet ? 8 : 4}
+        initialNumToRender={4}
         showsVerticalScrollIndicator={false}
+        maxToRenderPerBatch={4} // Batasi render per batch
+        windowSize={5} // Kurangi window render
+        removeClippedSubviews={true}
       />
       <MenuActionModal
         visible={modalVisible}

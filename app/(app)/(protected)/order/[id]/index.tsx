@@ -389,7 +389,7 @@ export default function OrderDetailsScreen() {
     receiptText += `
   <C>${phoneText.slice(0, 32)}</C>
   <C>=============================</C>
-  <L>INV: ${order.invoice_number.slice(0, 10)}</L>
+  <L>INV: ${order.invoice_number.slice(0, 15)}</L>
   <L>TGL: ${formatDatetoIndonesia(order.created_at)} - ${formatDatetoIndonesia2(order.created_at)}</L>
   <L>KASIR: ${(order.user?.first_name || "-").slice(0, 10)}</L>
   <C>-----------------------------</C>`;

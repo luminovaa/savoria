@@ -45,16 +45,18 @@ export type Role = {
 export type MenuItem = {
   id: number;
   name_menu: string;
-  description: string;
+  description?: string;
   price: number;
-  category_id: number;
+  category_id?: number;
   images: string;
   promo: boolean;
   promo_price: number | null;
-  promo_start: string | null;
-  promo_end: string | null;
-  created_at: string;
-  updated_at: string;
+  promo_start?: string | null;
+  promo_end?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  is_deleted?: boolean;
+  is_archive?: boolean;
   isAddButton?: boolean;
   category?: Category
 }

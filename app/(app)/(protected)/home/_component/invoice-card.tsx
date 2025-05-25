@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { memo, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -31,6 +31,8 @@ import { Feather } from "@expo/vector-icons";
 import { BLEPrinter } from "react-native-thermal-receipt-printer";
 import { Picker } from "@react-native-picker/picker";
 import { MenuItem } from "@/utils/types";
+import { debounce } from "lodash";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const isTablet = SCREEN_WIDTH > 600;
@@ -61,50 +63,70 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const [paidAmount, setPaidAmount] = useState<number | null>(null);
   const [changes, setChanges] = useState<number | null>(null);
 
+  const fetchMenuItems = async (cartIds: string[]) => {
+  try {
+    setLoading(true);
+    const existingIds = menuItems.map((item) => item.id.toString());
+    const newIds = cartIds.filter((id) => !existingIds.includes(id));
+
+    let newItems: MenuItem[] = [];
+
+    // Cek cache
+    const cachedItems = await AsyncStorage.getItem("menuItemsCache");
+    const cachedMenuItems = cachedItems ? JSON.parse(cachedItems) : {};
+    
+    const idsToFetch = newIds.filter((id) => !cachedMenuItems[id]);
+
+    if (idsToFetch.length > 0) {
+      const { data, error } = await supabase
+        .from("menu")
+        .select("id, name_menu, price, promo, promo_price, images")
+        .in("id", idsToFetch);
+
+      if (error) throw error;
+      newItems = data || [];
+
+      // Simpan ke cache
+      newItems.forEach((item) => {
+        cachedMenuItems[item.id] = item;
+      });
+      await AsyncStorage.setItem("menuItemsCache", JSON.stringify(cachedMenuItems));
+    }
+
+    // Gabungkan item dari cache dan data baru
+    newItems = newIds.map((id) => cachedMenuItems[id]).filter(Boolean);
+
+    setMenuItems((prev) => {
+      const combined = [...prev, ...newItems];
+      const uniqueItems = Array.from(
+        new Map(combined.map((item) => [item.id, item])).values()
+      );
+      return uniqueItems.filter((item) =>
+        cartIds.includes(item.id.toString())
+      );
+    });
+  } catch (error) {
+    console.error("Error fetching menu items for cart:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  const debouncedFetchMenuItems = debounce(fetchMenuItems, 300);
+
   useEffect(() => {
     generateUniqueInvoiceNumber();
-
     if (Object.keys(cart).length > 0) {
       const cartIds = Object.keys(cart);
-      fetchMenuItems(cartIds);
+      debouncedFetchMenuItems(cartIds);
     } else {
       setMenuItems([]);
       setLoading(false);
     }
+    return () => {
+      debouncedFetchMenuItems.cancel();
+    };
   }, [cart]);
-
-  const fetchMenuItems = async (cartIds: string[]) => {
-    try {
-      setLoading(true);
-      const existingIds = menuItems.map((item) => item.id.toString());
-      const newIds = cartIds.filter((id) => !existingIds.includes(id));
-
-      let newItems: MenuItem[] = [];
-      if (newIds.length > 0) {
-        const { data, error } = await supabase
-          .from("menu")
-          .select("*")
-          .in("id", newIds);
-
-        if (error) throw error;
-        newItems = data || [];
-      }
-
-      setMenuItems((prev) => {
-        const combined = [...prev, ...newItems];
-        const uniqueItems = Array.from(
-          new Map(combined.map((item) => [item.id, item])).values()
-        );
-        return uniqueItems.filter((item) =>
-          cartIds.includes(item.id.toString())
-        );
-      });
-    } catch (error) {
-      console.error("Error fetching menu items for cart:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const calculateSubtotal = (item: MenuItem, quantity: number) => {
     const price =
@@ -354,7 +376,6 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     try {
       setPrinting(true);
       await BLEPrinter.connectPrinter(inner_mac_address);
-
       // Print receipt first
 
       // After successful printing, insert data into database
@@ -408,7 +429,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       setCart({});
       setPaidAmount(null);
       setChanges(null);
-      
+
       const newInvoiceNumber = await generateSequentialInvoiceNumber();
       setInvoiceNumber(newInvoiceNumber);
       Alert.alert("Sukses", "Struk berhasil dicetak dan pesanan tersimpan");
@@ -514,8 +535,10 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       receiptText += `
   <C>${phoneText.slice(0, 32)}</C>
   <C>=============================</C>
-  <L>INV: ${invoiceNumber.slice(0, 10)}</L>
-  <L>TGL: ${formatDatetoIndonesia(new Date().toISOString())} - ${formatDatetoIndonesia2(new Date().toISOString())} </L>
+  <L>INV: ${invoiceNumber.slice(0, 15)}</L>
+  <L>TGL: ${formatDatetoIndonesia(
+    new Date().toISOString()
+  )} - ${formatDatetoIndonesia2(new Date().toISOString())} </L>
   <L>TIPE: ${paymentType.toUpperCase().slice(0, 10)}</L>
   <C>-----------------------------</C>`;
 
@@ -539,7 +562,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
           receiptText += `\n<L>  ${itemNameLines[1]}</L>`;
         }
       });
-  receiptText += `
+      receiptText += `
 <C>-----------------------------</C>
 <L>TOTAL:<R>${formatCurrency2(total)}</R></L>`;
       if (paid !== null) {
@@ -926,6 +949,102 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     );
   }
 
+  type RenderItemProps = {
+    item: MenuItem;
+    cart: { [id: string]: number };
+    updateQuantity: (id: string, delta: number) => void;
+    removeItem: (id: string) => void;
+    colors: any;
+    styles: any;
+  };
+
+  const RenderItem = memo(
+    ({
+      item,
+      cart,
+      updateQuantity,
+      removeItem,
+      colors,
+      styles,
+    }: RenderItemProps) => {
+      const quantity = cart[item.id.toString()];
+      const isPromo = item.promo && item.promo_price;
+
+      return (
+        <View style={styles.itemContainer}>
+          <View style={styles.imageContainer}>
+            {/* <Image
+              source={{ uri: item.images }}
+              style={styles.itemImage}
+              resizeMode={FastImage.resizeMode.cover}
+            /> */}
+            <FastImage
+              source={{
+                uri: item.images,
+                priority: FastImage.priority.low,
+                cache: FastImage.cacheControl.immutable,
+              }}
+              style={styles.itemImage}
+              resizeMode={FastImage.resizeMode.cover}
+            />
+          </View>
+          <View style={styles.itemInfo}>
+            <View style={styles.itemNameContainer}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemName} numberOfLines={3}>
+                  {capitalizeText(item.name_menu)}
+                </Text>
+                {isPromo ? (
+                  <Text style={styles.subtotalText}>
+                    {formatCurrency(item.promo_price!)}
+                  </Text>
+                ) : (
+                  <Text style={styles.subtotalText}>
+                    {formatCurrency(item.price)}
+                  </Text>
+                )}
+              </View>
+              {isPromo ? (
+                <View style={styles.priceContainer}>
+                  <Text style={styles.promoPrice}>
+                    {formatCurrency(item.promo_price! * quantity)}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.priceText}>
+                  {formatCurrency(item.price * quantity)}
+                </Text>
+              )}
+            </View>
+            <View style={styles.actionRow}>
+              <View style={styles.quantityContainer}>
+                <TouchableOpacity
+                  style={styles.quantityButton}
+                  onPress={() => updateQuantity(item.id.toString(), -1)}
+                >
+                  <Feather name="minus" size={13} color={colors.primary} />
+                </TouchableOpacity>
+                <Text style={styles.quantityText}>{quantity}</Text>
+                <TouchableOpacity
+                  style={styles.quantityButton}
+                  onPress={() => updateQuantity(item.id.toString(), 1)}
+                >
+                  <Feather name="plus" size={13} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={styles.removeButton}
+                onPress={() => removeItem(item.id.toString())}
+              >
+                <Feather name="trash-2" size={20} color={colors.error} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      );
+    }
+  );
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -976,104 +1095,16 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
               data={menuItems}
               extraData={cart}
               keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => {
-                const quantity = cart[item.id.toString()];
-                const isPromo = item.promo && item.promo_price;
-
-                return (
-                  <View style={styles.itemContainer}>
-                    <View style={styles.imageContainer}>
-                      <Image
-                        source={{ uri: item.images }}
-                        style={styles.itemImage}
-                        resizeMode="cover"
-                      />
-
-                      {/* <FastImage
-                        source={{
-                          uri: item.images,
-                          priority: FastImage.priority.normal,
-                          cache: FastImage.cacheControl.immutable,
-                        }}
-                        style={styles.itemImage}
-                        resizeMode={FastImage.resizeMode.cover}
-                      /> */}
-                    </View>
-                    <View style={styles.itemInfo}>
-                      <View style={styles.itemNameContainer}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.itemName} numberOfLines={3}>
-                            {capitalizeText(item.name_menu)}
-                          </Text>
-                          {isPromo ? (
-                            <Text style={styles.subtotalText}>
-                              {formatCurrency(item.promo_price!)}
-                            </Text>
-                          ) : (
-                            <Text style={styles.subtotalText}>
-                              {formatCurrency(item.price)}
-                            </Text>
-                          )}
-                        </View>
-                        {isPromo ? (
-                          <View style={styles.priceContainer}>
-                            <Text style={styles.promoPrice}>
-                              {formatCurrency(item.promo_price! * quantity)}
-                            </Text>
-                          </View>
-                        ) : (
-                          <Text style={styles.priceText}>
-                            {formatCurrency(item.price * quantity)}
-                          </Text>
-                        )}
-                      </View>
-
-                      <View style={styles.actionRow}>
-                        <View style={styles.quantityContainer}>
-                          <TouchableOpacity
-                            style={styles.quantityButton}
-                            onPress={() =>
-                              updateQuantity(item.id.toString(), -1)
-                            }
-                          >
-                            <Feather
-                              name="minus"
-                              size={13}
-                              color={colors.primary}
-                            />
-                          </TouchableOpacity>
-
-                          <Text style={styles.quantityText}>{quantity}</Text>
-
-                          <TouchableOpacity
-                            style={styles.quantityButton}
-                            onPress={() =>
-                              updateQuantity(item.id.toString(), 1)
-                            }
-                          >
-                            <Feather
-                              name="plus"
-                              size={13}
-                              color={colors.primary}
-                            />
-                          </TouchableOpacity>
-                        </View>
-
-                        <TouchableOpacity
-                          style={styles.removeButton}
-                          onPress={() => removeItem(item.id.toString())}
-                        >
-                          <Feather
-                            name="trash-2"
-                            size={20}
-                            color={colors.error}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                );
-              }}
+              renderItem={({ item }) => (
+                <RenderItem
+                  item={item}
+                  cart={cart}
+                  updateQuantity={updateQuantity}
+                  removeItem={removeItem}
+                  colors={colors}
+                  styles={styles}
+                />
+              )}
               scrollEnabled={false}
             />
           </View>
@@ -1166,7 +1197,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       )}
 
       <Modal
-        animationType="slide"
+        animationType="fade"
         transparent={true}
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
