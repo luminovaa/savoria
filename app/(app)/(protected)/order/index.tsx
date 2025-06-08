@@ -31,6 +31,7 @@ export default function OrderHistoryScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
   const LIMIT = 10;
+  const [userRole, setUserRole] = useState<string | null>(null); 
 
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
@@ -92,6 +93,38 @@ export default function OrderHistoryScreen() {
 
     return result;
   }, [allOrders, selectedMonth, selectedYear]);
+
+   const fetchUserRole = useCallback(async () => {
+    try {
+      // Ambil data pengguna yang sedang login
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) throw new Error("Gagal mendapatkan data pengguna");
+
+      // Ambil data profil pengguna berdasarkan user.id
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role_id")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError || !profile) throw new Error("Gagal mendapatkan data profil");
+
+      // Ambil nama role dari tabel role berdasarkan role_id
+      const { data: role, error: roleError } = await supabase
+        .from("role")
+        .select("name")
+        .eq("id", profile.role_id)
+        .single();
+
+      if (roleError || !role) throw new Error("Gagal mendapatkan data role");
+
+      setUserRole(role.name);
+    } catch (error: any) {
+      setError(error.message);
+      Alert.alert("Error", "Gagal memuat data role pengguna");
+    }
+  }, []);
+
 
   const fetchAllOrders = useCallback(async () => {
     try {
@@ -198,6 +231,7 @@ export default function OrderHistoryScreen() {
     };
     
     loadInitialData();
+    fetchUserRole();
   }, []); // Only run once on mount
 
   // When month/year changes, only fetch filtered orders (allOrders already loaded)
@@ -307,7 +341,7 @@ export default function OrderHistoryScreen() {
       <View style={styles.statsContainer}>
         {isTablet ? (
           // Single row for tablets
-          <View style={[styles.statsRow, styles.statsRowTablet]}>
+            <View style={[styles.statsRow, styles.statsRowTablet]}>
             <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Penjualan Hari Ini</Text>
               <Text style={[styles.statValue, { color: colors.text }]}>{stats.todayOrders}</Text>
@@ -317,15 +351,19 @@ export default function OrderHistoryScreen() {
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Hari Ini</Text>
               <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.todayRevenue)}</Text>
             </View>
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Bulan Ini</Text>
-              <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.monthlyRevenue)}</Text>
+            {(userRole !== 'Kasir') && (
+              <>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Bulan Ini</Text>
+                <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.monthlyRevenue)}</Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Tahun Ini</Text>
+                <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.yearlyRevenue)}</Text>
+              </View>
+              </>
+            )}
             </View>
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Tahun Ini</Text>
-              <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.yearlyRevenue)}</Text>
-            </View>
-          </View>
         ) : (
           // Two rows for mobile phones
           <>

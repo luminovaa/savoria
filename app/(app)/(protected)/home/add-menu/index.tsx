@@ -29,6 +29,7 @@ import {
   heightPercentageToDP as hp,
 } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const menuFormSchema = z.object({
   name_menu: z.string().min(1, "Nama menu wajib diisi"),
@@ -293,6 +294,7 @@ export default function AddMenuScreen() {
         console.error("Error menyimpan menu:", error);
         throw error;
       }
+      await AsyncStorage.removeItem("menuItemsCache");
 
       Alert.alert("Sukses", "Menu berhasil ditambahkan");
       router.back();

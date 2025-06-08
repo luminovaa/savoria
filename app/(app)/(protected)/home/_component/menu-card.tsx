@@ -240,8 +240,9 @@ export default function MainCardMenu({
         .eq("id", menuId);
 
       if (error) throw error;
-
+      
       setMenuItems(menuItems.filter((item) => item.id !== menuId));
+      await AsyncStorage.removeItem("menuItemsCache");
       Alert.alert("Sukses", "Menu berhasil dihapus");
     } catch (error: any) {
       Alert.alert("Error", "Gagal menghapus menu: " + error.message);

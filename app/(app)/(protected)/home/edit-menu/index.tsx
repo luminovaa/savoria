@@ -28,6 +28,7 @@ import {
 import CategoryModal from "../add-menu/_component/category-modal";
 import { Asset, ImageLibraryOptions, launchImageLibrary } from "react-native-image-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const menuFormSchema = z.object({
   name_menu: z.string().min(1, "Nama menu wajib diisi"),
@@ -320,6 +321,7 @@ const pickImage = () => {
         console.error("Error memperbarui menu:", error);
         throw error;
       }
+      await AsyncStorage.removeItem("menuItemsCache");
 
       Alert.alert("Sukses", "Menu berhasil diperbarui");
       router.back();
