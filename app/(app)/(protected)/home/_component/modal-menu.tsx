@@ -11,7 +11,8 @@ interface MenuActionModalProps {
   menu: MenuItem | null;
   position: { x: number; y: number };
   onDelete: (menu: MenuItem) => void;
-  onArchive?: (menu: MenuItem) => void; // New archive callback
+  onArchive?: (menu: MenuItem) => void;
+  onUpdateStock?: (menu: MenuItem) => void; // New optional prop
 }
 
 export default function MenuActionModal({ 
@@ -20,7 +21,8 @@ export default function MenuActionModal({
   menu, 
   position, 
   onDelete,
-  onArchive 
+  onArchive,
+  onUpdateStock 
 }: MenuActionModalProps) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -93,24 +95,48 @@ export default function MenuActionModal({
             }}
           >
             <View style={styles.iconContainer}>
-              <Feather name="edit" width={16} height={16} color={colors.text} />
+              <Feather name="edit" size={16} color={colors.text} />
             </View>
             <Text style={styles.modalButtonText}>Edit</Text>
           </Pressable>
-          <Pressable
-            style={styles.modalButton} 
-            onPress={() => {
-              if (menu && onArchive) {
-                onArchive(menu);
-                onClose();
-              }
-            }}
-          >
-            <View style={styles.iconContainer}>
-              <Feather name="archive" width={16} height={16} color={colors.text} />
-            </View>
-            <Text style={styles.modalButtonText}>Arsipkan</Text>
-          </Pressable>
+
+          {/* Archive Button */}
+          {onArchive && (
+            <Pressable
+              style={styles.modalButton}
+              onPress={() => {
+                if (menu) {
+                  onArchive(menu);
+                  onClose();
+                }
+              }}
+            >
+              <View style={styles.iconContainer}>
+                <Feather name="archive" size={16} color={colors.text} />
+              </View>
+              <Text style={styles.modalButtonText}>Arsipkan</Text>
+            </Pressable>
+          )}
+
+          {/* Update Stock Button - Only shown if onUpdateStock is provided */}
+          {onUpdateStock && (
+            <Pressable
+              style={styles.modalButton}
+              onPress={() => {
+                if (menu) {
+                  onUpdateStock(menu);
+                  onClose();
+                }
+              }}
+            >
+              <View style={styles.iconContainer}>
+                <Feather name="box" size={16} color={colors.text} />
+              </View>
+              <Text style={styles.modalButtonText}>Update Stock</Text>
+            </Pressable>
+          )}
+
+          {/* Delete Button */}
           <Pressable
             style={styles.modalButtonDestructive}
             onPress={() => {
@@ -121,7 +147,7 @@ export default function MenuActionModal({
             }}
           >
             <View style={styles.iconContainer}>
-              <Feather name="trash-2" width={16} height={16} color={colors.error} />
+              <Feather name="trash-2" size={16} color={colors.error} />
             </View>
             <Text style={styles.modalButtonDestructiveText}>Hapus</Text>
           </Pressable>

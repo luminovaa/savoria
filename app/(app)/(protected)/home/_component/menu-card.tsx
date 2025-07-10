@@ -19,12 +19,13 @@ import { MenuItem } from "@/utils/types";
 import { capitalizeText, formatCurrency } from "@/utils/format";
 import { Feather } from "@expo/vector-icons";
 import MenuActionModal from "./modal-menu";
+import UpdateStockModal from "./update-stock-modal"; // Import modal baru
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { debounce } from "lodash";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const isTablet = SCREEN_WIDTH > 600;
+
 type MainCardMenuProps = {
   selectedCategory: number | null;
   cart: { [id: string]: number };
@@ -47,18 +48,111 @@ export default function MainCardMenu({
   );
   const [isAdding, setIsAdding] = useState<string | null>(null);
 
+  // State untuk modal update stock
+  const [updateStockModalVisible, setUpdateStockModalVisible] = useState(false);
+  const [stockUpdateMenuItem, setStockUpdateMenuItem] =
+    useState<MenuItem | null>(null);
+
   const fetchMenuItems = async () => {
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    // Cek cache
-    const cachedItems = await AsyncStorage.getItem("menuItemsCache");
-    const cachedMenuItems = cachedItems ? JSON.parse(cachedItems) : {};
-    const cacheKey = selectedCategory ? `category_${selectedCategory}` : "all";
+      // 1. Cek cache untuk data statis (nama, harga, gambar, dll)
+      const cachedItems = await AsyncStorage.getItem("menuItemsCache");
+      const cachedMenuItems = cachedItems ? JSON.parse(cachedItems) : {};
+      const cacheKey = selectedCategory
+        ? `category_${selectedCategory}`
+        : "all";
 
-    if (cachedMenuItems[cacheKey]) {
+      let staticMenuData = [];
+
+      if (cachedMenuItems[cacheKey]) {
+        // Gunakan data cache untuk info statis
+        staticMenuData = cachedMenuItems[cacheKey];
+      } else {
+        // Fetch data statis jika belum ada cache
+        let query = supabase
+          .from("menu")
+          .select(
+            "id, name_menu, price, promo, promo_price, promo_start, promo_end, images, category_id, created_at, updated_at, is_deleted, is_archive"
+          )
+          .eq("is_deleted", false)
+          .eq("is_archive", false);
+
+        if (selectedCategory) {
+          query = query.eq("category_id", selectedCategory);
+        } else {
+          query = query.order("created_at", { ascending: false });
+        }
+
+        const { data: staticData, error: staticError } = await query;
+        if (staticError) throw staticError;
+
+        staticMenuData = staticData || [];
+
+        // Cache data statis
+        cachedMenuItems[cacheKey] = staticMenuData;
+        await AsyncStorage.setItem(
+          "menuItemsCache",
+          JSON.stringify(cachedMenuItems)
+        );
+      }
+
+      // 2. Fetch stock real-time (tidak di-cache)
+      const menuIds = staticMenuData.map((item: { id: any }) => item.id);
+      const { data: stockData, error: stockError } = await supabase
+        .from("menu")
+        .select("id, stock")
+        .in("id", menuIds);
+
+      if (stockError) throw stockError;
+
+      // 3. Gabungkan data statis dengan stock real-time
+      const stockMap: { [key: string]: number } = {};
+      (stockData || []).forEach((item) => {
+        stockMap[item.id] = item.stock;
+      });
+
+      const finalMenuData = staticMenuData.map(
+        (item: { id: string | number }) => ({
+          ...item,
+          stock: stockMap[item.id] || 0,
+        })
+      );
+
+      // Filter promo logic (sama seperti sebelumnya)
+      const currentDate = new Date();
+      const wibOffset = 7 * 60;
+      const wibDate = new Date(
+        currentDate.getTime() +
+          (wibOffset - currentDate.getTimezoneOffset()) * 60 * 1000
+      );
+
+      const normalizeDate = (date: Date) => {
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      };
+
+      const filteredItems = finalMenuData.filter(
+        (item: {
+          promo: any;
+          promo_start: string | number | Date;
+          promo_end: string | number | Date;
+        }) => {
+          if (!item.promo || !item.promo_start || !item.promo_end) {
+            return true;
+          }
+          const promoStart = normalizeDate(new Date(item.promo_start));
+          const promoEnd = normalizeDate(new Date(item.promo_end));
+          const normalizedCurrentDate = normalizeDate(wibDate);
+          return (
+            normalizedCurrentDate >= promoStart &&
+            normalizedCurrentDate <= promoEnd
+          );
+        }
+      );
+
       setMenuItems([
-        ...cachedMenuItems[cacheKey],
+        ...filteredItems,
         {
           id: 0,
           name_menu: "Tambah Menu",
@@ -75,106 +169,51 @@ export default function MainCardMenu({
           isAddButton: true,
           is_deleted: false,
           is_archive: false,
+          stock: 0,
         },
       ]);
+    } catch (error) {
+      console.error("Error fetching menu items:", error);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    let query = supabase
-      .from("menu")
-      .select("id, name_menu, price, promo, promo_price, promo_start, promo_end, images, category_id, created_at, updated_at, is_deleted, is_archive")
-      .eq("is_deleted", false)
-      .eq("is_archive", false);
-
-    if (selectedCategory) {
-      query = query.eq("category_id", selectedCategory);
-    } else {
-      query = query.order("created_at", { ascending: false });
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const currentDate = new Date();
-    const wibOffset = 7 * 60;
-    const wibDate = new Date(
-      currentDate.getTime() +
-        (wibOffset - currentDate.getTimezoneOffset()) * 60 * 1000
-    );
-
-    const normalizeDate = (date: Date) => {
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    };
-
-    const items = (data || []).filter((item: MenuItem) => {
-      if (!item.promo || !item.promo_start || !item.promo_end) {
-        return true;
-      }
-      const promoStart = normalizeDate(new Date(item.promo_start));
-      const promoEnd = normalizeDate(new Date(item.promo_end));
-      const normalizedCurrentDate = normalizeDate(wibDate);
-      return (
-        normalizedCurrentDate >= promoStart &&
-        normalizedCurrentDate <= promoEnd
-      );
-    });
-
-    // Simpan ke cache
-    cachedMenuItems[cacheKey] = items;
-    await AsyncStorage.setItem("menuItemsCache", JSON.stringify(cachedMenuItems));
-
-    setMenuItems([
-      ...items,
-      {
-        id: 0,
-        name_menu: "Tambah Menu",
-        description: "",
-        price: 0,
-        category_id: 0,
-        images: "",
-        promo: false,
-        promo_price: null,
-        promo_start: null,
-        promo_end: null,
-        created_at: "",
-        updated_at: "",
-        isAddButton: true,
-        is_deleted: false,
-        is_archive: false,
-      },
-    ]);
-  } catch (error) {
-    console.error("Error fetching menu items:", error);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   useEffect(() => {
     fetchMenuItems();
   }, [selectedCategory]);
 
   useEffect(() => {
-  const prefetchImages = async () => {
-    const uris = menuItems
-      .filter((item) => item.id !== 0 && item.images)
-      .slice(0, 8) 
-      .map((item) => ({
-        uri: item.images,
-        priority: FastImage.priority.low,
-        cache: FastImage.cacheControl.immutable,
-      }));
+    const prefetchImages = async () => {
+      const uris = menuItems
+        .filter((item) => item.id !== 0 && item.images)
+        .slice(0, 8)
+        .map((item) => ({
+          uri: item.images,
+          priority: FastImage.priority.low,
+          cache: FastImage.cacheControl.immutable,
+        }));
 
-    FastImage.preload(uris);
-  };
+      FastImage.preload(uris);
+    };
 
-  if (menuItems.length > 0) {
-    prefetchImages();
-  }
-}, [menuItems]);
+    if (menuItems.length > 0) {
+      prefetchImages();
+    }
+  }, [menuItems]);
 
   const updateQuantity = (id: string, delta: number) => {
+    const item = menuItems.find((menu) => menu.id.toString() === id);
+    if (!item) return;
+
+    if (delta > 0 && (cart[id] || 0) >= item.stock!) {
+      Alert.alert(
+        "Stok Tidak Cukup",
+        "Jumlah di keranjang melebihi stok yang tersedia."
+      );
+      return;
+    }
+
     setCart((prevCart) => {
       const newQuantity = (prevCart[id] || 0) + delta;
       if (newQuantity <= 0) {
@@ -188,6 +227,20 @@ export default function MainCardMenu({
   const addToCart = (id: string) => {
     if (isAdding) return;
 
+    const item = menuItems.find((menu) => menu.id.toString() === id);
+    if (!item || item.stock! <= 0) {
+      Alert.alert("Stok Habis", "Maaf, item ini sudah habis.");
+      return;
+    }
+
+    if ((cart[id] || 0) >= item.stock!) {
+      Alert.alert(
+        "Stok Tidak Cukup",
+        "Jumlah di keranjang melebihi stok yang tersedia."
+      );
+      return;
+    }
+
     setIsAdding(id);
     setCart((prevCart) => ({
       ...prevCart,
@@ -198,7 +251,7 @@ export default function MainCardMenu({
       setIsAdding(null);
     }, 100);
   };
-  
+
   const handleAddMenu = () => {
     router.push("/(app)/(protected)/home/add-menu");
   };
@@ -240,7 +293,7 @@ export default function MainCardMenu({
         .eq("id", menuId);
 
       if (error) throw error;
-      
+
       setMenuItems(menuItems.filter((item) => item.id !== menuId));
       await AsyncStorage.removeItem("menuItemsCache");
       Alert.alert("Sukses", "Menu berhasil dihapus");
@@ -263,6 +316,21 @@ export default function MainCardMenu({
     } catch (error: any) {
       Alert.alert("Error", "Gagal mengarsipkan menu: " + error.message);
     }
+  };
+
+  // Handler untuk membuka modal update stock
+  const handleUpdateStock = (item: MenuItem) => {
+    setStockUpdateMenuItem(item);
+    setUpdateStockModalVisible(true);
+  };
+
+  // Handler untuk ketika stock berhasil diupdate
+  const handleStockUpdated = (menuId: number, newStock: number) => {
+    setMenuItems((prevItems) =>
+      prevItems.map((item) =>
+        item.id === menuId ? { ...item, stock: newStock } : item
+      )
+    );
   };
 
   const styles = StyleSheet.create({
@@ -296,7 +364,7 @@ export default function MainCardMenu({
       shadowOpacity: 0.15,
       shadowRadius: 8,
       elevation: 2,
-      height: isTablet ? 240 : 250, // 240,
+      height: isTablet ? 240 : 250,
     },
     imageContainer: {
       width: "100%",
@@ -316,12 +384,12 @@ export default function MainCardMenu({
     },
     addButtonCard: {
       borderRadius: 12,
-      width: isTablet ? "23.8%" : "48%", // Match card width
+      width: isTablet ? "23.8%" : "48%",
       borderWidth: 1,
       borderColor: colors.border,
       borderStyle: "dashed",
       backgroundColor: colors.card,
-      height: isTablet ? 240 : 250, // 240,
+      height: isTablet ? 240 : 250,
       justifyContent: "center",
       alignItems: "center",
     },
@@ -348,6 +416,9 @@ export default function MainCardMenu({
       color: colors.text,
     },
     priceContainer: {
+      flexDirection: "row", // Tambahkan ini
+      justifyContent: "space-between", // Tambahkan ini
+      alignItems: "center", // Tambahkan ini
       marginBottom: 8,
     },
     price: {
@@ -365,6 +436,11 @@ export default function MainCardMenu({
       fontSize: 13,
       fontWeight: "600",
       color: colors.primary,
+    },
+    stockText: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      // marginBottom: 8, // Hapus ini jika ingin sejajar
     },
     labelPromo: {
       position: "absolute",
@@ -386,6 +462,13 @@ export default function MainCardMenu({
       paddingHorizontal: 12,
       borderRadius: 8,
       backgroundColor: colors.primary,
+      alignItems: "center",
+    },
+    addButtonDisabled: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: colors.textSecondary,
       alignItems: "center",
     },
     addButtonText: {
@@ -412,6 +495,7 @@ export default function MainCardMenu({
       color: colors.text,
     },
   });
+
   type RenderItemProps = {
     item: MenuItem;
     cart: { [id: string]: number };
@@ -426,6 +510,7 @@ export default function MainCardMenu({
     ) => void;
     isAdding: string | null;
   };
+
   const RenderItem = memo(
     ({
       item,
@@ -459,6 +544,7 @@ export default function MainCardMenu({
 
       const quantity = cart[item.id.toString()] || 0;
       const hasPromo = item.promo && item.promo_price !== null;
+      const isOutOfStock = item.stock! <= 0;
 
       return (
         <TouchableOpacity
@@ -471,38 +557,38 @@ export default function MainCardMenu({
             </View>
           )}
           <View style={styles.imageContainer}>
-            {/* <Image
-              source={{ uri: item.images }}
-              style={styles.image}
-              resizeMode="cover"
-            /> */}
             <FastImage
-          source={{
-            uri: item.images,
-            priority: FastImage.priority.low,
-            cache: FastImage.cacheControl.immutable,
-          }}
-          style={styles.image}
-          resizeMode={FastImage.resizeMode.cover}
-        />
+              source={{
+                uri: item.images,
+                priority: FastImage.priority.low,
+                cache: FastImage.cacheControl.immutable,
+              }}
+              style={styles.image}
+              resizeMode={FastImage.resizeMode.cover}
+            />
           </View>
           <View style={styles.contentContainer}>
             <Text style={styles.name} numberOfLines={2}>
               {capitalizeText(item.name_menu)}
             </Text>
             <View style={styles.priceContainer}>
-              {hasPromo ? (
-                <>
-                  <Text style={styles.originalPrice}>
-                    {formatCurrency(item.price)}
-                  </Text>
-                  <Text style={styles.promoPrice}>
-                    {formatCurrency(item.promo_price!)}
-                  </Text>
-                </>
-              ) : (
-                <Text style={styles.price}>{formatCurrency(item.price)}</Text>
-              )}
+              <View>
+                {hasPromo ? (
+                  <>
+                    <Text style={styles.originalPrice}>
+                      {formatCurrency(item.price)}
+                    </Text>
+                    <Text style={styles.promoPrice}>
+                      {formatCurrency(item.promo_price!)}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.price}>{formatCurrency(item.price)}</Text>
+                )}
+              </View>
+              <Text style={styles.stockText}>
+                {isOutOfStock ? "Stok Habis" : `${item.stock} pcs`}
+              </Text>
             </View>
             {quantity > 0 ? (
               <View style={styles.quantityContainer}>
@@ -534,12 +620,14 @@ export default function MainCardMenu({
               <TouchableOpacity
                 onPress={() => addToCart(item.id.toString())}
                 style={[
-                  styles.addButton,
+                  isOutOfStock ? styles.addButtonDisabled : styles.addButton,
                   isAdding === item.id.toString() && { opacity: 0.5 },
                 ]}
-                disabled={isAdding === item.id.toString()}
+                disabled={isAdding === item.id.toString() || isOutOfStock}
               >
-                <Text style={styles.addButtonText}>Tambah</Text>
+                <Text style={styles.addButtonText}>
+                  {isOutOfStock ? "Stok Habis" : "Tambah"}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -581,10 +669,12 @@ export default function MainCardMenu({
         extraData={cart}
         initialNumToRender={4}
         showsVerticalScrollIndicator={false}
-        maxToRenderPerBatch={4} // Batasi render per batch
-        windowSize={5} // Kurangi window render
+        maxToRenderPerBatch={4}
+        windowSize={5}
         removeClippedSubviews={true}
       />
+
+      {/* Modal Action Menu */}
       <MenuActionModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
@@ -592,6 +682,15 @@ export default function MainCardMenu({
         position={modalPosition}
         onDelete={confirmDeleteMenuItem}
         onArchive={archiveMenuItem}
+        onUpdateStock={handleUpdateStock} // Pass handler ke modal
+      />
+
+      {/* Modal Update Stock */}
+      <UpdateStockModal
+        visible={updateStockModalVisible}
+        onClose={() => setUpdateStockModalVisible(false)}
+        menu={stockUpdateMenuItem}
+        onStockUpdated={handleStockUpdated}
       />
     </SafeAreaView>
   );

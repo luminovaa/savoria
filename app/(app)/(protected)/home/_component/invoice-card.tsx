@@ -64,53 +64,56 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const [changes, setChanges] = useState<number | null>(null);
 
   const fetchMenuItems = async (cartIds: string[]) => {
-  try {
-    setLoading(true);
-    const existingIds = menuItems.map((item) => item.id.toString());
-    const newIds = cartIds.filter((id) => !existingIds.includes(id));
+    try {
+      setLoading(true);
+      const existingIds = menuItems.map((item) => item.id.toString());
+      const newIds = cartIds.filter((id) => !existingIds.includes(id));
 
-    let newItems: MenuItem[] = [];
+      let newItems: MenuItem[] = [];
 
-    // Cek cache
-    const cachedItems = await AsyncStorage.getItem("menuItemsCache");
-    const cachedMenuItems = cachedItems ? JSON.parse(cachedItems) : {};
-    
-    const idsToFetch = newIds.filter((id) => !cachedMenuItems[id]);
+      // Cek cache
+      const cachedItems = await AsyncStorage.getItem("menuItemsCache");
+      const cachedMenuItems = cachedItems ? JSON.parse(cachedItems) : {};
 
-    if (idsToFetch.length > 0) {
-      const { data, error } = await supabase
-        .from("menu")
-        .select("id, name_menu, price, promo, promo_price, images")
-        .in("id", idsToFetch);
+      const idsToFetch = newIds.filter((id) => !cachedMenuItems[id]);
 
-      if (error) throw error;
-      newItems = data || [];
+      if (idsToFetch.length > 0) {
+        const { data, error } = await supabase
+          .from("menu")
+          .select("id, name_menu, price, promo, promo_price, images")
+          .in("id", idsToFetch);
 
-      // Simpan ke cache
-      newItems.forEach((item) => {
-        cachedMenuItems[item.id] = item;
+        if (error) throw error;
+        newItems = data || [];
+
+        // Simpan ke cache
+        newItems.forEach((item) => {
+          cachedMenuItems[item.id] = item;
+        });
+        await AsyncStorage.setItem(
+          "menuItemsCache",
+          JSON.stringify(cachedMenuItems)
+        );
+      }
+
+      // Gabungkan item dari cache dan data baru
+      newItems = newIds.map((id) => cachedMenuItems[id]).filter(Boolean);
+
+      setMenuItems((prev) => {
+        const combined = [...prev, ...newItems];
+        const uniqueItems = Array.from(
+          new Map(combined.map((item) => [item.id, item])).values()
+        );
+        return uniqueItems.filter((item) =>
+          cartIds.includes(item.id.toString())
+        );
       });
-      await AsyncStorage.setItem("menuItemsCache", JSON.stringify(cachedMenuItems));
+    } catch (error) {
+      console.error("Error fetching menu items for cart:", error);
+    } finally {
+      setLoading(false);
     }
-
-    // Gabungkan item dari cache dan data baru
-    newItems = newIds.map((id) => cachedMenuItems[id]).filter(Boolean);
-
-    setMenuItems((prev) => {
-      const combined = [...prev, ...newItems];
-      const uniqueItems = Array.from(
-        new Map(combined.map((item) => [item.id, item])).values()
-      );
-      return uniqueItems.filter((item) =>
-        cartIds.includes(item.id.toString())
-      );
-    });
-  } catch (error) {
-    console.error("Error fetching menu items for cart:", error);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const debouncedFetchMenuItems = debounce(fetchMenuItems, 300);
 
@@ -233,28 +236,72 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
 
   const handleOrder = async () => {
     try {
-      // Validate user authentication and profile
+      // Validasi pembayaran
+      if (
+        paymentType === "cash" &&
+        (!paidAmount || paidAmount < calculateTotal())
+      ) {
+        Alert.alert("Error", "Jumlah pembayaran tidak mencukupi");
+        return;
+      }
+
+      // Validasi user
       const {
         data: { user },
         error: authError,
       } = await supabase.auth.getUser();
       if (authError || !user) throw new Error("No user is logged in");
 
-      const authUserId = user.id;
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
+      const profileId = user.id;
+
+      // Hitung total, kembalian
+      const total = calculateTotal();
+      const changesAmount = paidAmount ? paidAmount - total : 0;
+
+      // Simpan pesanan ke database
+      const { data: orderData, error: orderError } = await supabase
+        .from("orders")
+        .insert({
+          created_at: new Date().toISOString(),
+          invoice_number: invoiceNumber,
+          total: Object.values(cart).reduce((sum, qty) => sum + qty, 0),
+          total_amount: total,
+          paid: paidAmount,
+          changes: changesAmount,
+          user_id: profileId,
+          payment_type: paymentType,
+          status: "completed",
+        })
         .select("id")
-        .eq("id", authUserId)
         .single();
 
-      if (profileError || !profileData) {
-        throw new Error("Profile not found for this user");
-      }
+      if (orderError) throw orderError;
 
-      // Proceed to scan Bluetooth devices
-      scanBluetoothDevices();
+      const orderId = orderData.id;
+      setOrderId(orderId);
+
+      // Simpan item pesanan
+      const orderItems = menuItems.map((item) => ({
+        created_at: new Date().toISOString(),
+        quantity: cart[item.id.toString()],
+        subtotal: calculateSubtotal(item, cart[item.id.toString()]),
+        menu_id: item.id,
+        order_id: orderId,
+        price: item.promo && item.promo_price ? item.promo_price : item.price,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from("order_items")
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      await updateMenuStock(orderItems);
+
+      // Scan printer Bluetooth untuk cetak struk
+      // scanBluetoothDevices(); // ini akan trigger connectAndPrint di device selection
     } catch (error) {
-      console.error("Error initiating order:", error);
+      console.error("Error processing order:", error);
       Alert.alert("Error", "Gagal memproses pesanan");
     }
   };
@@ -372,13 +419,40 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     }
   };
 
+  const updateMenuStock = async (orderItems: any[]) => {
+    try {
+      // Buat array untuk batch update
+      const stockUpdates = orderItems.map((item) => ({
+        id: item.menu_id,
+        quantity: item.quantity,
+      }));
+
+      // Update stock untuk setiap item
+      for (const update of stockUpdates) {
+        const { error } = await supabase.rpc("decrease_stock", {
+          menu_id: update.id,
+          quantity_sold: update.quantity,
+        });
+
+        if (error) {
+          console.error(`Error updating stock for menu ${update.id}:`, error);
+          throw error;
+        }
+      }
+
+      console.log("Stock updated successfully");
+    } catch (error) {
+      console.error("Error updating stock:", error);
+      throw error;
+    }
+  };
+
+  // 2. Modifikasi fungsi connectAndPrint untuk menambahkan update stock
   const connectAndPrint = async (inner_mac_address: string) => {
     try {
       setPrinting(true);
       await BLEPrinter.connectPrinter(inner_mac_address);
-      // Print receipt first
 
-      // After successful printing, insert data into database
       const total = calculateTotal();
       const changesAmount = paidAmount ? paidAmount - total : 0;
 
@@ -423,6 +497,8 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
         .insert(orderItems);
 
       if (itemsError) throw itemsError;
+
+      await updateMenuStock(orderItems);
 
       // Clear cart and close modal on success
       setModalVisible(false);
