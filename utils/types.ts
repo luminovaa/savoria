@@ -50,6 +50,7 @@ export type MenuItem = {
   category_id?: number;
   images: string;
   promo: boolean;
+  stock?: number;
   promo_price: number | null;
   promo_start?: string | null;
   promo_end?: string | null;
