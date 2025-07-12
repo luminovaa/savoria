@@ -252,54 +252,8 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       } = await supabase.auth.getUser();
       if (authError || !user) throw new Error("No user is logged in");
 
-      const profileId = user.id;
-
-      // Hitung total, kembalian
-      const total = calculateTotal();
-      const changesAmount = paidAmount ? paidAmount - total : 0;
-
-      // Simpan pesanan ke database
-      const { data: orderData, error: orderError } = await supabase
-        .from("orders")
-        .insert({
-          created_at: new Date().toISOString(),
-          invoice_number: invoiceNumber,
-          total: Object.values(cart).reduce((sum, qty) => sum + qty, 0),
-          total_amount: total,
-          paid: paidAmount,
-          changes: changesAmount,
-          user_id: profileId,
-          payment_type: paymentType,
-          status: "completed",
-        })
-        .select("id")
-        .single();
-
-      if (orderError) throw orderError;
-
-      const orderId = orderData.id;
-      setOrderId(orderId);
-
-      // Simpan item pesanan
-      const orderItems = menuItems.map((item) => ({
-        created_at: new Date().toISOString(),
-        quantity: cart[item.id.toString()],
-        subtotal: calculateSubtotal(item, cart[item.id.toString()]),
-        menu_id: item.id,
-        order_id: orderId,
-        price: item.promo && item.promo_price ? item.promo_price : item.price,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from("order_items")
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
-      await updateMenuStock(orderItems);
-
       // Scan printer Bluetooth untuk cetak struk
-      // scanBluetoothDevices(); // ini akan trigger connectAndPrint di device selection
+      scanBluetoothDevices(); // ini akan trigger connectAndPrint di device selection
     } catch (error) {
       console.error("Error processing order:", error);
       Alert.alert("Error", "Gagal memproses pesanan");
