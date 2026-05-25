@@ -2,7 +2,10 @@
 
 # dependencies
 node_modules/
-android/app/build
+mobile/node_modules/
+mobile/android/app/build
+mobile/.yarn/
+mobile/.pnp.*
 # Expo
 .expo/
 dist/
@@ -30,9 +33,17 @@ yarn-error.*
 *.pem
 
 # local env files
-# .env*.local
+.env
+.env.*
+!.env.example
+!mobile/.env.example
+!backend/.env.example
 
 # typescript
 *.tsbuildinfo
 
 app-example
+mobile/app-example
+backend/bin/
+backend/coverage.out
+backend/tmp/

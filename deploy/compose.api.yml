@@ -1,0 +1,18 @@
+services:
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: savoria-api:latest
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8080}:8080"
+    networks:
+      - postgres
+
+networks:
+  postgres:
+    external: true
+    name: ${POSTGRES_DOCKER_NETWORK:?set POSTGRES_DOCKER_NETWORK to the existing PostgreSQL Docker network}
