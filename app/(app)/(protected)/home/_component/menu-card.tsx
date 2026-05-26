@@ -557,7 +557,7 @@ export default function MainCardMenu({
             </View>
           )}
           <View style={styles.imageContainer}>
-            <FastImage
+            {/* <FastImage
               source={{
                 uri: item.images,
                 priority: FastImage.priority.low,
@@ -565,6 +565,11 @@ export default function MainCardMenu({
               }}
               style={styles.image}
               resizeMode={FastImage.resizeMode.cover}
+            /> */}
+             <Image
+              source={{ uri: item.images }}
+              style={styles.image}
+              resizeMode="cover"
             />
           </View>
           <View style={styles.contentContainer}>

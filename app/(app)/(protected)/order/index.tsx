@@ -153,104 +153,105 @@ export default function OrderHistoryScreen() {
   }, []);
 
   const fetchOrders = useCallback(async (pageNumber = 0, refresh = false) => {
-    try {
-      if (refresh) {
-        setLoading(true);
-      } else if (pageNumber > 0) {
-        setLoadingMore(true);
-      }
-
-      const from = pageNumber * LIMIT;
-      const to = from + LIMIT - 1;
-
-      let query = supabase
-        .from("orders")
-        .select("*", { count: "exact" })
-        .order("created_at", { ascending: false });
-
-      const startDate = new Date(selectedYear, selectedMonth - 1, 1);
-      const endDate = new Date(selectedYear, selectedMonth, 0);
-      endDate.setHours(23, 59, 59, 999);
-
-      query = query.gte('created_at', startDate.toISOString())
-                   .lte('created_at', endDate.toISOString());
-
-      if (pageNumber > 0) {
-        query = query.range(from, to);
-      } else {
-        query = query.limit(LIMIT);
-      }
-
-      const { data, error, count } = await query;
-
-      if (error) throw error;
-
-      const orderData = data || [];
-      
-      const ordersWithCheckedIds = orderData.map((order: any) => {
-        if (!order.id) {
-          order.id = Date.now().toString() + Math.random().toString(36).substring(2, 9);
-        }
-        return order as Order;
-      });
-
-      if (refresh) {
-        setOrders(ordersWithCheckedIds);
-      } else {
-        setOrders(prevOrders => {
-          const existingIds = new Set(prevOrders.map(order => order.id));
-          const newOrders = ordersWithCheckedIds.filter(order => !existingIds.has(order.id));
-          return [...prevOrders, ...newOrders];
-        });
-      }
-
-      if (orderData.length < LIMIT) {
-        setHasMore(false);
-      } else {
-        setHasMore(true);
-      }
-      
-      setPage(pageNumber);
-    } catch (error: any) {
-      setError(error.message);
-      Alert.alert("Error", "Gagal memuat riwayat pesanan");
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      setRefreshing(false);
+  try {
+    if (refresh) {
+      setLoading(true);
+    } else if (pageNumber > 0) {
+      setLoadingMore(true);
     }
-  }, [selectedMonth, selectedYear]);
+
+    const from = pageNumber * LIMIT;
+    const to = from + LIMIT - 1;
+
+    // Query untuk orders yang ditampilkan (dengan filter month/year)
+    let query = supabase
+      .from("orders")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false });
+
+    const startDate = new Date(selectedYear, selectedMonth - 1, 1);
+    const endDate = new Date(selectedYear, selectedMonth, 0);
+    endDate.setHours(23, 59, 59, 999);
+
+    query = query.gte('created_at', startDate.toISOString())
+                 .lte('created_at', endDate.toISOString());
+
+    if (pageNumber > 0) {
+      query = query.range(from, to);
+    } else {
+      query = query.limit(LIMIT);
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    const orderData = data || [];
+    
+    const ordersWithCheckedIds = orderData.map((order: any) => {
+      if (!order.id) {
+        order.id = Date.now().toString() + Math.random().toString(36).substring(2, 9);
+      }
+      return order as Order;
+    });
+
+    if (refresh) {
+      setOrders(ordersWithCheckedIds);
+    } else {
+      setOrders(prevOrders => {
+        const existingIds = new Set(prevOrders.map(order => order.id));
+        const newOrders = ordersWithCheckedIds.filter(order => !existingIds.has(order.id));
+        return [...prevOrders, ...newOrders];
+      });
+    }
+
+    if (orderData.length < LIMIT) {
+      setHasMore(false);
+    } else {
+      setHasMore(true);
+    }
+    
+    setPage(pageNumber);
+  } catch (error: any) {
+    setError(error.message);
+    Alert.alert("Error", "Gagal memuat riwayat pesanan");
+  } finally {
+    setLoading(false);
+    setLoadingMore(false);
+    setRefreshing(false);
+  }
+}, [selectedMonth, selectedYear]);
+
+useEffect(() => {
+  // Skip pada first render (sudah di-handle di useEffect pertama)
+  if (allOrders.length > 0) {
+    fetchOrders(0, true); // Hanya fetch filtered orders, stats tetap dari allOrders
+  }
+}, [selectedMonth, selectedYear]);
 
   // Initial load - fetch all orders first, then filtered orders
   useEffect(() => {
     const loadInitialData = async () => {
-      // Fetch all orders first for stats
-      await fetchAllOrders();
-      // Then fetch filtered orders for display
-      await fetchOrders(0, true);
+      await fetchUserRole();
+      await fetchAllOrders(); // Fetch semua orders untuk stats
+      await fetchOrders(0, true); // Fetch filtered orders untuk display
     };
     
     loadInitialData();
-    fetchUserRole();
-  }, []); // Only run once on mount
+  }, []);
 
-  // When month/year changes, only fetch filtered orders (allOrders already loaded)
-  useEffect(() => {
-    if (allOrders.length > 0) { // Only if we already have all orders loaded
-      fetchOrders(0, true);
-    }
-  }, [selectedMonth, selectedYear]);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    setHasMore(true);
-    
-    // Fetch all orders first for updated stats
-    await fetchAllOrders();
-    // Then fetch filtered orders
-    await fetchOrders(0, true);
-  }, [fetchOrders, fetchAllOrders]);
-
+// Perbaiki handleRefresh - PASTIKAN fetchAllOrders dipanggil
+const handleRefresh = useCallback(async () => {
+  setRefreshing(true);
+  setHasMore(true);
+  
+  // Fetch all orders dulu untuk update stats
+  await fetchAllOrders();
+  // Kemudian fetch filtered orders
+  await fetchOrders(0, true);
+  
+  setRefreshing(false);
+}, [fetchAllOrders, fetchOrders]);
   const handleLoadMore = useCallback(() => {
     if (!loadingMore && hasMore) {
       fetchOrders(page + 1);

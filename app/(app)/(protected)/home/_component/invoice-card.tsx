@@ -60,6 +60,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const [printing, setPrinting] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentType, setPaymentType] = useState<"cash" | "qris">("cash");
+  const [customer, setCustomer] = useState<string | null>(null);
   const [paidAmount, setPaidAmount] = useState<number | null>(null);
   const [changes, setChanges] = useState<number | null>(null);
 
@@ -419,6 +420,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       const { data: orderData, error: orderError } = await supabase
         .from("orders")
         .insert({
+          customer: customer,
           created_at: new Date().toISOString(),
           invoice_number: invoiceNumber,
           total: Object.values(cart).reduce((sum, qty) => sum + qty, 0),
@@ -565,6 +567,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       receiptText += `
   <C>${phoneText.slice(0, 32)}</C>
   <C>=============================</C>
+  <L>PELANGGAN: ${customer!.slice(0, 15) || "-"}</L>
   <L>INV: ${invoiceNumber.slice(0, 15)}</L>
   <L>TGL: ${formatDatetoIndonesia(
     new Date().toISOString()
@@ -1150,6 +1153,17 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
                 {formatCurrency(calculateTotal())}
               </Text>
             </View>
+          <View style={styles.paymentInputContainer}>
+            <Text style={styles.paymentLabel}>Pelanggan</Text>
+            <TextInput
+              style={[styles.paymentInput, { borderColor: colors.border }]}
+              value={customer ?? ""}
+              onChangeText={(text) => setCustomer(text)}
+              placeholder="Masukkan nama pelanggan (opsional)"
+              placeholderTextColor={colors.textSecondary}
+              returnKeyType="done"
+            />
+          </View>
             <View style={styles.paymentInputContainer}>
               <Text style={styles.paymentLabel}>Bayar</Text>
               <TextInput

@@ -87,6 +87,7 @@ export type OrderDetail = {
   created_at: string;
   invoice_number: string;
   total: number;
+  customer: string;
   total_amount: number;
   payment_type: string;
   status: string;
