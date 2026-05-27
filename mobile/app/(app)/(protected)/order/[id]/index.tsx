@@ -9,11 +9,7 @@ import {
   TouchableOpacity,
   Share,
   Dimensions,
-  Modal,
   FlatList,
-  PermissionsAndroid,
-  Platform,
-  Linking,
 } from "react-native";
 import { api } from "@/utils/api";
 import { useTheme } from "@/hooks/use-theme";
@@ -23,18 +19,13 @@ import { OrderDetail, OrderItem } from "@/utils/types";
 import {
   capitalizeText,
   formatCurrency,
-  formatCurrency2,
-  formatDatetoIndonesia,
-  formatDatetoIndonesia2,
 } from "@/utils/format";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BLEPrinter } from "react-native-thermal-receipt-printer";
-import { Picker } from "@react-native-picker/picker";
-
-interface BluetoothDevice {
-  inner_mac_address: string;
-  device_name: string;
-}
+import {
+  buildDetailReceiptText,
+  PrinterPickerModal,
+  useReceiptPrinter,
+} from "@/services/receipt-printer";
 
 export default function OrderDetailsScreen() {
   const { colors, theme } = useTheme();
@@ -44,12 +35,24 @@ export default function OrderDetailsScreen() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [bluetoothDevices, setBluetoothDevices] = useState<BluetoothDevice[]>(
-    []
-  );
-  const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
-  const [printing, setPrinting] = useState(false);
+  const {
+    modalVisible,
+    setModalVisible,
+    devices: bluetoothDevices,
+    selectedDevice,
+    setSelectedDevice,
+    printing,
+    scanBluetoothDevices,
+    connectAndPrint: printToDevice,
+  } = useReceiptPrinter({
+    permissionRequiredTitle: "Permissions Required",
+    permissionRequiredMessage:
+      "Bluetooth and location permissions are needed to scan for printers. Please grant all permissions.",
+    permissionSettingsLabel: "Open Settings",
+    noPrinterMessage:
+      "No Bluetooth printers found. Ensure your printer is powered on and in pairing mode.",
+    scanErrorPrefix: "Failed to scan for Bluetooth devices",
+  });
 
   const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } =
     Dimensions.get("window");
@@ -118,318 +121,29 @@ export default function OrderDetailsScreen() {
       setLoading(false);
     }
   };
-  const requestAndroid31Permissions = async () => {
-    if (Platform.OS !== "android") {
-      console.log("Skipping permission request for non-Android platform");
-      return true;
-    }
-
-    try {
-      // Define permissions with specific rationales
-      const permissions = [
-        {
-          permission: PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-          rationale: {
-            title: "Bluetooth Scan Permission",
-            message:
-              "This app needs to scan for Bluetooth devices to connect to your thermal printer.",
-            buttonPositive: "OK",
-            buttonNegative: "Cancel",
-          },
-        },
-        {
-          permission: PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-          rationale: {
-            title: "Bluetooth Connect Permission",
-            message:
-              "This app needs to connect to your thermal printer via Bluetooth.",
-            buttonPositive: "OK",
-            buttonNegative: "Cancel",
-          },
-        },
-        // {
-        //   permission: PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        //   rationale: {
-        //     title: "Location Permission",
-        //     message:
-        //       "Bluetooth scanning may require location access to detect nearby devices.",
-        //     buttonPositive: "OK",
-        //     buttonNegative: "Cancel",
-        //   },
-        // },
-      ];
-
-      let allGranted = true;
-
-      for (const { permission, rationale } of permissions) {
-        // Check if permission is already granted
-        const isGranted = await PermissionsAndroid.check(permission);
-        console.log(`Permission ${permission} granted: ${isGranted}`);
-
-        if (isGranted) {
-          continue;
-        }
-
-        // Request permission
-        const result = await PermissionsAndroid.request(permission, rationale);
-        console.log(`Permission ${permission} result: ${result}`);
-
-        if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-          allGranted = false;
-          // Check if permission was permanently denied
-          const shouldShowRationale = await PermissionsAndroid.request(
-            permission
-          );
-          if (
-            !shouldShowRationale &&
-            result === PermissionsAndroid.RESULTS.DENIED
-          ) {
-            Alert.alert(
-              "Permission Required",
-              `The ${rationale.title} is required to print receipts. Please enable it in Settings.`,
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Open Settings",
-                  onPress: () => Linking.openSettings(),
-                },
-              ]
-            );
-          }
-        }
-      }
-
-      return allGranted;
-    } catch (error) {
-      console.error("Permission request error:", error);
-      Alert.alert("Error", "Failed to request permissions. Please try again.");
-      return false;
-    }
-  };
-
-  // Example integration with scanBluetoothDevices
-  const scanBluetoothDevices = async () => {
-    console.log("Starting scanBluetoothDevices");
-    try {
-      const hasPermission = await requestAndroid31Permissions();
-      if (!hasPermission) {
-        Alert.alert(
-          "Permissions Required",
-          "Bluetooth and location permissions are needed to scan for printers. Please grant all permissions.",
-          [
-            { text: "Cancel", style: "cancel" },
-            { text: "Open Settings", onPress: () => Linking.openSettings() },
-          ]
-        );
-        return;
-      }
-
-      setPrinting(true);
-      await BLEPrinter.init();
-      const devices = await BLEPrinter.getDeviceList();
-      console.log("Devices found:", devices);
-
-      if (devices.length === 0) {
-        Alert.alert(
-          "Info",
-          "No Bluetooth printers found. Ensure your printer is powered on and in pairing mode."
-        );
-      }
-
-      setBluetoothDevices(devices);
-      setModalVisible(true);
-    } catch (error) {
-      console.error("Scan error:", error);
-      Alert.alert("Error", `Failed to scan for Bluetooth devices: ${error}`);
-    } finally {
-      setPrinting(false);
-    }
-  };
-
   const connectAndPrint = async (inner_mac_address: string) => {
     try {
-      setPrinting(true);
-      await BLEPrinter.connectPrinter(inner_mac_address);
-      await printReceipt();
+      if (!order) return;
+      const { data: shopData, error } = await api
+        .from("shop")
+        .select("name, address, phone, wifi_name, wifi_password")
+        .single();
+
+      if (error) throw error;
+      const receiptText = buildDetailReceiptText({
+        shopData,
+        order,
+        items: orderItems,
+      });
+
+      await printToDevice(inner_mac_address, receiptText);
       setModalVisible(false);
       Alert.alert("Success", "Struk berhasil dicetak");
     } catch (error) {
       console.error("Print error:", error);
       Alert.alert("Error", "Gagal mencetak struk");
-    } finally {
-      setPrinting(false);
     }
   };
-
-  async function printReceipt() {
-    if (!order) return;
-
-    // Fetch shop details through the authenticated API.
-    let shopData = null;
-    const { data, error } = await api
-      .from("shop")
-      .select("name, address, phone, wifi_name, wifi_password")
-      .single();
-
-    if (error) throw error;
-    shopData = data;
-
-    // Fungsi untuk memecah teks panjang menjadi beberapa baris
-    const splitLongText = (text: string, maxLength: number): string[] => {
-      const words = text.split(" ");
-      const lines: string[] = [];
-      let currentLine = words[0] || "";
-
-      for (let i = 1; i < words.length; i++) {
-        const word = words[i];
-        if (currentLine.length + word.length + 1 <= maxLength) {
-          currentLine += " " + word;
-        } else {
-          lines.push(currentLine);
-          currentLine = word;
-        }
-      }
-      lines.push(currentLine);
-      return lines;
-    };
-
-    const splitTextToLines = (
-      text: string,
-      maxLength: number,
-      maxLines: number = 2
-    ): string[] => {
-      const words = text.split(" ");
-      const lines: string[] = [];
-      let currentLine = words[0] || "";
-
-      for (let i = 1; i < words.length; i++) {
-        const word = words[i];
-        if (currentLine.length + word.length + 1 <= maxLength) {
-          currentLine += " " + word;
-        } else {
-          if (lines.length < maxLines - 1) {
-            lines.push(currentLine);
-            currentLine = word;
-          } else {
-            // Jika sudah mencapai maxLines, gabungkan sisa kata dan tambahkan ...
-            currentLine += " " + word;
-            if (currentLine.length > maxLength) {
-              currentLine = currentLine.substring(0, maxLength - 3) + "...";
-            }
-            break;
-          }
-        }
-      }
-
-      if (currentLine) {
-        lines.push(currentLine);
-      }
-
-      return lines;
-    };
-
-    // Format header (max 28 chars per line for 60mm paper)
-    const shopName = shopData.name.toUpperCase();
-    const addressLines = splitLongText(shopData.address, 32);
-    const phoneText = `Telp: ${shopData.phone}`;
-
-    let receiptText = `
-  <C>=============================</C>
-  <C>** ${shopName.slice(0, 32)} **</C>`;
-
-    // Tambahkan setiap baris alamat
-    addressLines.forEach((line) => {
-      receiptText += `
-  <C>${line}</C>`;
-    });
-
-    receiptText += `
-  <C>${phoneText.slice(0, 32)}</C>
-  <C>=============================</C>
-  <L>PELANGGAN: ${(order.customer || "-").slice(0, 15)}</L>
-  <L>INV: ${order.invoice_number.slice(0, 15)}</L>
-  <L>TGL: ${formatDatetoIndonesia(order.created_at)} - ${formatDatetoIndonesia2(order.created_at)}</L>
-  <L>KASIR: ${(order.user?.full_name || "-").slice(0, 10)}</L>
-  <C>-----------------------------</C>`;
-
-    const formatReceiptLine = (
-      left: string,
-      right: string,
-      width: number = 32
-    ): string => {
-      // Hitung spasi yang dibutuhkan antara konten kiri dan kanan
-      const leftLen = left.length;
-      const rightLen = right.length;
-      const spacesNeeded = Math.max(1, width - leftLen - rightLen);
-      const spaces = " ".repeat(spacesNeeded);
-
-      return `<L>${left}${spaces}${right}</L>`;
-    };
-
-    orderItems.forEach((item) => {
-      const itemName = capitalizeText(item.menu?.name_menu) || "Item";
-      const quantityText = `${item.quantity}x`;
-      const subtotalText = formatCurrency2(item.subtotal);
-
-      // Buat array untuk baris nama item
-      const itemNameLines = splitTextToLines(itemName, 18);
-
-      // Format baris item dengan fixed width
-      // Kolom kiri = 20 karakter, sisanya untuk harga
-      const formattedLine = formatReceiptLine(
-        `${quantityText} ${itemNameLines[0] || ""}`,
-        subtotalText,
-        32
-      );
-      receiptText += `\n${formattedLine}`;
-
-      // Jika nama item terlalu panjang, tampilkan di baris berikutnya
-      if (itemNameLines.length > 1) {
-        receiptText += `\n<L>  ${itemNameLines[1]}</L>`;
-      }
-    });
-  receiptText += `
-<C>-----------------------------</C>
-<L>TOTAL:<R>${formatCurrency2(order.total_amount)}</R></L>`;
-     if (order.paid !== null) {
-            receiptText += `
-    <L>DIBAYAR:<R>${formatCurrency2(order.paid)}</R></L>`;
-            if (order.changes! > 0) {
-              receiptText += `
-<C>-----------------------------</C>
-<L>KEMBALI:<R>${formatCurrency2(order.changes || 0)}</R></L>`;
-            }
-          }
-    
-          receiptText += `
-<C>=============================</C>
-<C>*** TERIMA KASIH ***</C>
-<C>Barang yang dibeli</C>
-<C>tidak dapat ditukar</C>`;
-  
-    if (shopData.wifi_name) {
-      receiptText += `
-  <C>-----------------------------</C>
-  <C>WiFi Toko</C>
-  <C>${shopData.wifi_name.slice(0, 32)}</C>`;
-
-      if (shopData.wifi_password) {
-        receiptText += `
-    <C>Password: ${shopData.wifi_password.slice(0, 32)}</C>`;
-      }
-    }
-
-    try {
-      await BLEPrinter.printBill(receiptText, {
-        cut: true,
-        beep: true,
-        encoding: "GBK",
-      });
-    } catch (error) {
-      console.error("Print error:", error);
-      throw error;
-    }
-  }
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -910,77 +624,20 @@ export default function OrderDetailsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Bluetooth Picker Modal */}
-      <Modal
+      <PrinterPickerModal
         animationType="slide"
-        transparent={true}
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Pilih Printer Bluetooth</Text>
-            <Text style={styles.descriptionText}>
-              Pilih perangkat printer Bluetooth yang tersedia di daftar di bawah
-              ini. Pastikan printer dalam mode pairing dan berada dalam
-              jangkauan. Jika tidak ada perangkat yang terdeteksi, aktifkan
-              Bluetooth dan coba lagi.
-            </Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={selectedDevice}
-                onValueChange={(itemValue) => setSelectedDevice(itemValue)}
-                style={styles.picker}
-                enabled={bluetoothDevices.length > 0}
-              >
-                <Picker.Item label="Pilih Printer..." value={null} />
-                {bluetoothDevices.length > 0 ? (
-                  bluetoothDevices.map((device) => (
-                    <Picker.Item
-                      key={device.inner_mac_address}
-                      label={device.device_name || device.inner_mac_address}
-                      value={device.inner_mac_address}
-                    />
-                  ))
-                ) : (
-                  <Picker.Item
-                    label="Tidak ada printer terdeteksi"
-                    value={null}
-                  />
-                )}
-              </Picker>
-            </View>
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.secondaryButton]}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text
-                  style={[styles.actionButtonText, styles.secondaryButtonText]}
-                >
-                  Batal
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  (!selectedDevice || printing) && { opacity: 0.5 },
-                ]}
-                onPress={() =>
-                  selectedDevice && connectAndPrint(selectedDevice)
-                }
-                disabled={!selectedDevice || printing}
-              >
-                {printing ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.actionButtonText}>Cetak</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setModalVisible(false)}
+        devices={bluetoothDevices}
+        selectedDevice={selectedDevice}
+        onSelectDevice={setSelectedDevice}
+        onPrint={() => selectedDevice && connectAndPrint(selectedDevice)}
+        printing={printing}
+        styles={styles}
+        description={
+          "Pilih perangkat printer Bluetooth yang tersedia di daftar di bawah\nini. Pastikan printer dalam mode pairing dan berada dalam\njangkauan. Jika tidak ada perangkat yang terdeteksi, aktifkan\nBluetooth dan coba lagi."
+        }
+      />
     </SafeAreaView>
   );
 }

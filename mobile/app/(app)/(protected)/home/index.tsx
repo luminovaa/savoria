@@ -138,6 +138,7 @@ export default function HomeScreen() {
                 setMenuSort={setMenuSort}
                 cart={cart}
                 setCart={setCart}
+                usePlainGrid
               />
             </View>
           </View>

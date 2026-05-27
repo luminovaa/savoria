@@ -53,6 +53,7 @@ type MainCardMenuProps = {
   setMenuSort: (sort: MenuSort) => void;
   cart: { [id: string]: number };
   setCart: React.Dispatch<React.SetStateAction<{ [id: string]: number }>>;
+  usePlainGrid?: boolean;
 };
 
 export default function MainCardMenu({
@@ -61,6 +62,7 @@ export default function MainCardMenu({
   setMenuSort,
   cart,
   setCart,
+  usePlainGrid = false,
 }: MainCardMenuProps) {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -349,6 +351,12 @@ export default function MainCardMenu({
       justifyContent: "flex-start",
       gap: 15,
       marginBottom: 15,
+    },
+    plainGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      rowGap: 15,
     },
     card: {
       borderRadius: 12,
@@ -656,34 +664,56 @@ export default function MainCardMenu({
 
   return (
     <SafeAreaView style={styles.container}>
-      <FlatList
-        data={menuItems}
-        ListHeaderComponent={renderToolbar}
-        renderItem={({ item }) => (
-          <RenderItem
-            item={item}
-            cart={cart}
-            colors={colors}
-            styles={styles}
-            updateQuantity={updateQuantity}
-            addToCart={addToCart}
-            handleAddMenu={handleAddMenu}
-            handleLongPress={handleLongPress}
-            isAdding={isAdding}
-          />
-        )}
-        keyExtractor={(item) => item.id.toString()}
-        numColumns={isTablet ? 4 : 2}
-        columnWrapperStyle={styles.row}
-        contentContainerStyle={styles.list}
-        scrollEnabled={true}
-        extraData={cart}
-        initialNumToRender={4}
-        showsVerticalScrollIndicator={false}
-        maxToRenderPerBatch={4}
-        windowSize={5}
-        removeClippedSubviews={true}
-      />
+      {usePlainGrid ? (
+        <View style={styles.list}>
+          {renderToolbar()}
+          <View style={styles.plainGrid}>
+            {menuItems.map((item) => (
+              <RenderItem
+                key={item.id.toString()}
+                item={item}
+                cart={cart}
+                colors={colors}
+                styles={styles}
+                updateQuantity={updateQuantity}
+                addToCart={addToCart}
+                handleAddMenu={handleAddMenu}
+                handleLongPress={handleLongPress}
+                isAdding={isAdding}
+              />
+            ))}
+          </View>
+        </View>
+      ) : (
+        <FlatList
+          data={menuItems}
+          ListHeaderComponent={renderToolbar}
+          renderItem={({ item }) => (
+            <RenderItem
+              item={item}
+              cart={cart}
+              colors={colors}
+              styles={styles}
+              updateQuantity={updateQuantity}
+              addToCart={addToCart}
+              handleAddMenu={handleAddMenu}
+              handleLongPress={handleLongPress}
+              isAdding={isAdding}
+            />
+          )}
+          keyExtractor={(item) => item.id.toString()}
+          numColumns={isTablet ? 4 : 2}
+          columnWrapperStyle={styles.row}
+          contentContainerStyle={styles.list}
+          scrollEnabled={true}
+          extraData={cart}
+          initialNumToRender={4}
+          showsVerticalScrollIndicator={false}
+          maxToRenderPerBatch={4}
+          windowSize={5}
+          removeClippedSubviews={true}
+        />
+      )}
 
       <Modal
         transparent
