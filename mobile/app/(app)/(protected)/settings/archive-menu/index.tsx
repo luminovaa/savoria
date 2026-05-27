@@ -17,6 +17,7 @@ import {
 import { useTheme } from "@/hooks/use-theme";
 import { useRouter } from "expo-router";
 import { api } from "@/utils/api";
+import { request } from "@/services/api-client";
 import { MenuItem } from "@/utils/types";
 import { formatCurrency } from "@/utils/format";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -59,34 +60,7 @@ export default function MainCardMenu({ selectedCategory }: MainCardMenuProps) {
 
       if (error) throw error;
 
-      // Get current date in WIB (UTC+7)
-      const currentDate = new Date();
-      const wibOffset = 7 * 60; // WIB is UTC+7, in minutes
-      const wibDate = new Date(
-        currentDate.getTime() +
-          (wibOffset - currentDate.getTimezoneOffset()) * 60 * 1000
-      );
-
-      const normalizeDate = (date: Date) => {
-        return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      };
-
-      const items = (data || []).filter((item: MenuItem) => {
-        if (!item.promo || !item.promo_start || !item.promo_end) {
-          return true;
-        }
-
-        const promoStart = normalizeDate(new Date(item.promo_start));
-        const promoEnd = normalizeDate(new Date(item.promo_end));
-        const normalizedCurrentDate = normalizeDate(wibDate);
-
-        return (
-          normalizedCurrentDate >= promoStart &&
-          normalizedCurrentDate <= promoEnd
-        );
-      });
-
-      setMenuItems(items); // No "Tambah Menu" button for archived view
+      setMenuItems(data || []); // No "Tambah Menu" button for archived view
     } catch (error) {
       console.error("Error fetching menu items:", error);
     } finally {
@@ -112,12 +86,10 @@ export default function MainCardMenu({ selectedCategory }: MainCardMenuProps) {
 
   const unarchiveMenuItem = async (item: MenuItem) => {
     try {
-      const { error } = await api
-        .from("menu")
-        .update({ is_archive: false, updated_at: new Date().toISOString() })
-        .eq("id", item.id);
-
-      if (error) throw error;
+      await request(`/v1/menus/${item.id}/archive`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_archive: false }),
+      });
 
       setMenuItems(menuItems.filter((menu) => menu.id !== item.id));
       Alert.alert("Sukses", "Menu berhasil di-unarsipkan");

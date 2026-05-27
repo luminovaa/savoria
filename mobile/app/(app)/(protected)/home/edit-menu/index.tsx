@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import ImageResizer from 'react-native-image-resizer';
 import { api } from "@/utils/api";
+import { request } from "@/services/api-client";
 import { useTheme } from "@/hooks/use-theme";
 import { Feather } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -32,9 +33,10 @@ import { useQueryClient } from "@tanstack/react-query";
 
 const menuFormSchema = z.object({
   name_menu: z.string().min(1, "Nama menu wajib diisi"),
-  description: z.string().min(1, "Deskripsi wajib diisi"),
+  description: z.string().nullable().optional().transform((value) => value ?? ""),
   price: z.number().positive("Harga harus lebih dari 0"),
   category_id: z.number().positive("Kategori wajib dipilih"),
+  stock: z.number().default(0),
   promo: z.boolean().default(false),
   promo_price: z.number().optional(),
   promo_start: z.string().optional(),
@@ -42,6 +44,11 @@ const menuFormSchema = z.object({
 });
 
 type MenuFormData = z.infer<typeof menuFormSchema>;
+
+function appendMenuFormValue(body: FormData, key: string, value: string | number | boolean | null | undefined) {
+  if (value === null || value === undefined || value === "") return;
+  body.append(key, String(value));
+}
 
 interface Category {
   id: number;
@@ -59,6 +66,7 @@ export default function EditMenuScreen() {
     description: "",
     price: 0,
     category_id: 0,
+    stock: 0,
     promo: false,
     promo_price: 0,
     promo_start: "",
@@ -128,9 +136,10 @@ export default function EditMenuScreen() {
       if (menu) {
         setForm({
           name_menu: menu.name_menu,
-          description: menu.description,
+          description: menu.description ?? "",
           price: menu.price,
           category_id: menu.category_id,
+          stock: menu.stock || 0,
           promo: menu.promo,
           promo_price: menu.promo_price || 0,
           promo_start: menu.promo_start || "",
@@ -230,13 +239,6 @@ const pickImage = () => {
 
   const uploadImage = async (uri: string) => {
     try {
-      const response = await fetch(uri);
-      const arraybuffer = await response.arrayBuffer();
-  
-      if (arraybuffer.byteLength > 5 * 1024 * 1024) {
-        throw new Error("Ukuran file terlalu besar. Maksimal 5MB");
-      }
-  
       const fileType = uri.split(".").pop()?.toLowerCase() ?? "jpeg";
       if (!["jpeg", "png", "jpg"].includes(fileType)) {
         throw new Error(
@@ -245,11 +247,16 @@ const pickImage = () => {
       }
   
       const fileName = `menu-${Date.now()}.${fileType}`;
+      const mimeType = fileType === "jpg" ? "image/jpeg" : `image/${fileType}`;
   
       const { data, error } = await api.storage
         .from("file")
-        .upload(fileName, arraybuffer, {
-          contentType: `image/${fileType}`,
+        .upload(fileName, {
+          uri,
+          name: fileName,
+          type: mimeType,
+        }, {
+          contentType: mimeType,
           cacheControl: "3600",
           upsert: false,
         });
@@ -294,34 +301,27 @@ const pickImage = () => {
       }
 
       setLoading(true);
-      let imageUrl = image;
-
-      // If image is changed, upload the new image
+      const body = new FormData();
+      appendMenuFormValue(body, "name_menu", form.name_menu.trim());
+      appendMenuFormValue(body, "description", form.description?.trim());
+      appendMenuFormValue(body, "price", form.price);
+      appendMenuFormValue(body, "category_id", form.category_id);
+      appendMenuFormValue(body, "stock", form.stock);
+      appendMenuFormValue(body, "promo", form.promo);
+      appendMenuFormValue(body, "promo_price", form.promo ? form.promo_price : null);
+      appendMenuFormValue(body, "promo_start", form.promo ? form.promo_start : null);
+      appendMenuFormValue(body, "promo_end", form.promo ? form.promo_end : null);
       if (image && !image.startsWith("http")) {
-        // Check if image is a local URI
-        imageUrl = await uploadImage(image);
+        const extension = image.split(".").pop()?.toLowerCase() || "jpg";
+        const type = extension === "png" ? "image/png" : "image/jpeg";
+        body.append("image", {
+          uri: image,
+          name: `menu-${Date.now()}.${extension}`,
+          type,
+        } as any);
       }
 
-      const { error } = await api
-        .from("menu")
-        .update({
-          name_menu: form.name_menu.trim(),
-          description: form.description.trim(),
-          price: form.price,
-          category_id: form.category_id,
-          images: imageUrl,
-          promo: form.promo,
-          promo_price: form.promo ? form.promo_price : null,
-          promo_start: form.promo ? form.promo_start : null,
-          promo_end: form.promo ? form.promo_end : null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", Number(menuId));
-
-      if (error) {
-        console.error("Error memperbarui menu:", error);
-        throw error;
-      }
+      await request(`/v1/menus/${Number(menuId)}`, { method: "PATCH", body });
       await queryClient.invalidateQueries({ queryKey: ["menus"] });
 
       Alert.alert("Sukses", "Menu berhasil diperbarui");
@@ -626,7 +626,7 @@ const pickImage = () => {
               <View style={styles.fieldIcon}>
                 <Feather name="file-text" size={18} color={colors.primary} />
               </View>
-              <Text style={styles.label}>Deskripsi</Text>
+              <Text style={styles.label}>Deskripsi (disarankan)</Text>
             </View>
             <TextInput
               style={[
@@ -636,7 +636,7 @@ const pickImage = () => {
               ]}
               value={form.description}
               onChangeText={(value) => handleInputChange("description", value)}
-              placeholder="Masukkan deskripsi menu"
+              placeholder="Masukkan deskripsi menu agar lebih jelas"
               placeholderTextColor={colors.textSecondary}
               multiline
               numberOfLines={4}

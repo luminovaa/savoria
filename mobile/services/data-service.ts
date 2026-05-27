@@ -1,11 +1,17 @@
 import { request, SessionUser } from "./api-client";
+import type { MenuSort } from "@/utils/types";
 
 export const dataService = {
   roles: () => request<any[]>("/v1/roles"),
   profile: (id: string) => request<any>(`/v1/profiles/${id}`),
   categories: () => request<any[]>("/v1/categories"),
-  menus: (categoryId?: number | null, archived = false) =>
-    request<any[]>(`/v1/menus?archived=${archived}${categoryId ? `&category_id=${categoryId}` : ""}`),
+  menus: (categoryId?: number | null, archived = false, sort: MenuSort = "newest") => {
+    const search = new URLSearchParams();
+    search.set("archived", String(archived));
+    search.set("sort", sort);
+    if (categoryId) search.set("category_id", String(categoryId));
+    return request<any[]>(`/v1/menus?${search.toString()}`);
+  },
   menu: (id: number | string) => request<any>(`/v1/menus/${id}`),
   shop: () => request<any>("/v1/shop"),
   orders: (params?: { month?: number; year?: number; limit?: number; offset?: number }) => {

@@ -219,12 +219,20 @@ func (i importer) importMenus(ctx context.Context, tx pgx.Tx) error {
 }
 
 func (i importer) copySimple(ctx context.Context, tx pgx.Tx) error {
+	orderCustomerExpr := "'' as customer"
+	hasCustomer, err := sourceColumnExists(ctx, i.source, "orders", "customer")
+	if err != nil {
+		return err
+	}
+	if hasCustomer {
+		orderCustomerExpr = "coalesce(customer,'') as customer"
+	}
 	statements := []struct {
 		query  string
 		insert string
 	}{
 		{`select 1,name,address,phone,wifi_name,wifi_password,created_at,updated_at from public.shop order by created_at limit 1`, `insert into shops(id,name,address,phone,wifi_name,wifi_password,created_at,updated_at) values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(id) do update set name=excluded.name,address=excluded.address,phone=excluded.phone,wifi_name=excluded.wifi_name,wifi_password=excluded.wifi_password,updated_at=excluded.updated_at`},
-		{`with numbered as (select id,'import-' || id::text as client_order_id,total,total_amount,paid,coalesce(changes,0) as changes,user_id,payment_type,status,created_at,row_number() over(partition by created_at::date order by created_at,id) as daily_sequence from public.orders) select id,client_order_id,'INV-' || to_char(created_at,'YYYYMMDD') || '-' || lpad(daily_sequence::text,4,'0') as invoice_number,total,total_amount,paid,changes,user_id,payment_type,status,created_at from numbered`, `insert into orders(id,client_order_id,invoice_number,total,total_amount,paid,changes,user_id,payment_type,status,created_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict(id) do nothing`},
+		{fmt.Sprintf(`with numbered as (select id,'import-' || id::text as client_order_id,total,total_amount,paid,coalesce(changes,0) as changes,user_id,payment_type,status,created_at,%s,row_number() over(partition by created_at::date order by created_at,id) as daily_sequence from public.orders) select id,client_order_id,'INV-' || to_char(created_at,'YYYYMMDD') || '-' || lpad(daily_sequence::text,4,'0') as invoice_number,customer,total,total_amount,paid,changes,user_id,payment_type,status,created_at from numbered`, orderCustomerExpr), `insert into orders(id,client_order_id,invoice_number,customer,total,total_amount,paid,changes,user_id,payment_type,status,created_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) on conflict(id) do nothing`},
 		{`select id,order_id,menu_id,quantity,subtotal,price,created_at from public.order_items`, `insert into order_items(id,order_id,menu_id,quantity,subtotal,price,created_at) values($1,$2,$3,$4,$5,$6,$7) on conflict(id) do nothing`},
 	}
 	for _, task := range statements {
@@ -252,6 +260,16 @@ func (i importer) copySimple(ctx context.Context, tx pgx.Tx) error {
 	_, _ = tx.Exec(ctx, `select setval(pg_get_serial_sequence('categories','id'), coalesce((select max(id) from categories),1), true)`)
 	_, _ = tx.Exec(ctx, `select setval(pg_get_serial_sequence('menus','id'), coalesce((select max(id) from menus),1), true)`)
 	return nil
+}
+
+func sourceColumnExists(ctx context.Context, conn *pgx.Conn, tableName, columnName string) (bool, error) {
+	var exists bool
+	err := conn.QueryRow(ctx, `select exists(
+		select 1
+		from information_schema.columns
+		where table_schema = 'public' and table_name = $1 and column_name = $2
+	)`, tableName, columnName).Scan(&exists)
+	return exists, err
 }
 
 func nullable(value string) any {

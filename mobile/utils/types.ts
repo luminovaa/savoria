@@ -40,6 +40,8 @@ export type Role = {
   name: string;
 };
 
+export type MenuSort = "newest" | "oldest" | "az" | "za" | "bestseller";
+
 export type MenuItem = {
   id: number;
   name_menu: string;
@@ -71,6 +73,7 @@ export type Order = {
   id: string;
   created_at: string;
   invoice_number: string;
+  customer: string;
   total: number;
   total_amount: number;
   payment_type: string;
@@ -84,6 +87,7 @@ export type OrderDetail = {
   id: string;
   created_at: string;
   invoice_number: string;
+  customer: string;
   total: number;
   total_amount: number;
   payment_type: string;

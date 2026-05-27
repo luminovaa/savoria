@@ -37,6 +37,16 @@ import { MenuItem } from "@/utils/types";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const isTablet = SCREEN_WIDTH > 600;
 
+function isPromoActive(item: MenuItem) {
+  if (!item.promo || item.promo_price === null || item.promo_price === undefined || !item.promo_start || !item.promo_end) return false;
+  const today = new Date();
+  const promoStart = new Date(item.promo_start);
+  const promoEnd = new Date(item.promo_end);
+  const normalizeDate = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const normalizedToday = normalizeDate(new Date(today.getTime() + (7 * 60 - today.getTimezoneOffset()) * 60 * 1000));
+  return normalizedToday >= normalizeDate(promoStart) && normalizedToday <= normalizeDate(promoEnd);
+}
+
 type InvoiceCartProps = {
   cart: { [id: string]: number };
   setCart: React.Dispatch<React.SetStateAction<{ [id: string]: number }>>;
@@ -59,6 +69,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
   const [paymentType, setPaymentType] = useState<"cash" | "qris">("cash");
+  const [customer, setCustomer] = useState("");
   const [paidAmount, setPaidAmount] = useState<number | null>(null);
   const [changes, setChanges] = useState<number | null>(null);
   const [confirmedTotal, setConfirmedTotal] = useState<number | null>(null);
@@ -74,7 +85,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
         queryFn: async () => {
           const { data, error } = await api
           .from("menu")
-          .select("id, name_menu, price, promo, promo_price, images, stock")
+          .select("id, name_menu, price, promo, promo_price, promo_start, promo_end, images, stock")
           .in("id", cartIds);
           if (error) throw error;
           return (data || []) as MenuItem[];
@@ -96,12 +107,12 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       setLoading(false);
       clientOrderId.current = null;
       setInvoiceNumber("");
+      setCustomer("");
     }
   }, [cart]);
 
   const calculateSubtotal = (item: MenuItem, quantity: number) => {
-    const price =
-      item.promo && item.promo_price ? item.promo_price : item.price;
+    const price = isPromoActive(item) ? item.promo_price! : item.price;
     return price * quantity;
   };
 
@@ -151,6 +162,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       setPrinting(true);
       const order = await submitOrder({
         client_order_id: clientOrderId.current,
+        customer: customer.trim(),
         items: menuItems.map((item) => ({
           menu_id: item.id,
           quantity: cart[item.id.toString()],
@@ -314,6 +326,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       setChanges(null);
       setConfirmedTotal(null);
       setInvoiceNumber("");
+      setCustomer("");
       clientOrderId.current = null;
       Alert.alert("Sukses", "Pesanan tersimpan dan struk berhasil dicetak");
     } catch (error) {
@@ -418,6 +431,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       receiptText += `
   <C>${phoneText.slice(0, 32)}</C>
   <C>=============================</C>
+  <L>PELANGGAN: ${(customer.trim() || "-").slice(0, 15)}</L>
   <L>INV: ${invoiceNumber.slice(0, 15)}</L>
   <L>TGL: ${formatDatetoIndonesia(
     new Date().toISOString()
@@ -851,7 +865,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       styles,
     }: RenderItemProps) => {
       const quantity = cart[item.id.toString()];
-      const isPromo = item.promo && item.promo_price;
+      const isPromo = isPromoActive(item);
 
       return (
         <View style={styles.itemContainer}>
@@ -1002,6 +1016,17 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
               <Text style={styles.totalAmount}>
                 {formatCurrency(calculateTotal())}
               </Text>
+            </View>
+            <View style={styles.paymentInputContainer}>
+              <Text style={styles.paymentLabel}>Pelanggan</Text>
+              <TextInput
+                style={[styles.paymentInput, { borderColor: colors.border }]}
+                value={customer}
+                onChangeText={setCustomer}
+                placeholder="Masukkan nama pelanggan (opsional)"
+                placeholderTextColor={colors.textSecondary}
+                returnKeyType="done"
+              />
             </View>
             <View style={styles.paymentInputContainer}>
               <Text style={styles.paymentLabel}>Bayar</Text>

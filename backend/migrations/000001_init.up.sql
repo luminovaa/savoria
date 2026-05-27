@@ -70,6 +70,7 @@ create table if not exists orders (
   id uuid primary key default gen_random_uuid(),
   client_order_id text not null unique,
   invoice_number text not null unique,
+  customer text not null default '',
   total integer not null check (total > 0),
   total_amount numeric(14,2) not null check (total_amount >= 0),
   paid numeric(14,2),

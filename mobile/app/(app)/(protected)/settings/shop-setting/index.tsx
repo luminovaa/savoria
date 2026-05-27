@@ -89,12 +89,11 @@ export default function ShopSettingScreen() {
       const { error } = await api
         .from("shop")
         .update({
-          name: editedShop.name!.trim(),
-          address: editedShop.address!.trim(),
-          phone: editedShop.phone!.trim(),
-          wifi_name: editedShop.wifi_name!.trim(),
-          wifi_password: editedShop.wifi_password!.trim(),
-          updated_at: new Date(),
+          name: editedShop.name?.trim() || "",
+          address: editedShop.address?.trim() || "",
+          phone: editedShop.phone?.trim() || "",
+          wifi_name: editedShop.wifi_name?.trim() || "",
+          wifi_password: editedShop.wifi_password?.trim() || "",
         })
         .eq("id", shop.id)
         .select();

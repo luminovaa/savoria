@@ -9,36 +9,62 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
+  Modal,
 } from "react-native";
 import FastImage from "react-native-fast-image";
 
 import { useTheme } from "@/hooks/use-theme";
 import { useRouter } from "expo-router";
 import { api } from "@/utils/api";
-import { MenuItem } from "@/utils/types";
+import { request } from "@/services/api-client";
+import type { MenuItem, MenuSort } from "@/utils/types";
 import { capitalizeText, formatCurrency } from "@/utils/format";
 import { Feather } from "@expo/vector-icons";
 import MenuActionModal from "./modal-menu";
 import UpdateStockModal from "./update-stock-modal"; // Import modal baru
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
+import { dataService } from "@/services/data-service";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const isTablet = SCREEN_WIDTH > 600;
 
+const sortOptions: { value: MenuSort; label: string }[] = [
+  { value: "newest", label: "Terbaru" },
+  { value: "oldest", label: "Terlama" },
+  { value: "az", label: "A-Z" },
+  { value: "za", label: "Z-A" },
+  { value: "bestseller", label: "Terlaris" },
+];
+
+function isPromoActive(item: MenuItem) {
+  if (!item.promo || item.promo_price === null || item.promo_price === undefined || !item.promo_start || !item.promo_end) return false;
+  const today = new Date();
+  const promoStart = new Date(item.promo_start);
+  const promoEnd = new Date(item.promo_end);
+  const normalizeDate = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const normalizedToday = normalizeDate(new Date(today.getTime() + (7 * 60 - today.getTimezoneOffset()) * 60 * 1000));
+  return normalizedToday >= normalizeDate(promoStart) && normalizedToday <= normalizeDate(promoEnd);
+}
+
 type MainCardMenuProps = {
   selectedCategory: number | null;
+  menuSort: MenuSort;
+  setMenuSort: (sort: MenuSort) => void;
   cart: { [id: string]: number };
   setCart: React.Dispatch<React.SetStateAction<{ [id: string]: number }>>;
 };
 
 export default function MainCardMenu({
   selectedCategory,
+  menuSort,
+  setMenuSort,
   cart,
   setCart,
 }: MainCardMenuProps) {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortModalVisible, setSortModalVisible] = useState(false);
   const { colors } = useTheme();
   const router = useRouter();
   const [modalVisible, setModalVisible] = useState(false);
@@ -59,63 +85,15 @@ export default function MainCardMenu({
       setLoading(true);
 
       const finalMenuData = await queryClient.fetchQuery({
-        queryKey: ["menus", selectedCategory],
+        queryKey: ["menus", selectedCategory, menuSort],
         staleTime: 5 * 60 * 1000,
         queryFn: async () => {
-        let query = api
-          .from("menu")
-          .select(
-            "id, name_menu, price, promo, promo_price, promo_start, promo_end, images, category_id, created_at, updated_at, is_deleted, is_archive, stock"
-          )
-          .eq("is_deleted", false)
-          .eq("is_archive", false);
-
-        if (selectedCategory) {
-          query = query.eq("category_id", selectedCategory);
-        } else {
-          query = query.order("created_at", { ascending: false });
-        }
-
-        const { data: staticData, error: staticError } = await query;
-        if (staticError) throw staticError;
-
-        return staticData || [];
+          return dataService.menus(selectedCategory, false, menuSort);
         },
       });
 
-      // Filter promo logic (sama seperti sebelumnya)
-      const currentDate = new Date();
-      const wibOffset = 7 * 60;
-      const wibDate = new Date(
-        currentDate.getTime() +
-          (wibOffset - currentDate.getTimezoneOffset()) * 60 * 1000
-      );
-
-      const normalizeDate = (date: Date) => {
-        return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      };
-
-      const filteredItems = finalMenuData.filter(
-        (item: {
-          promo: any;
-          promo_start: string | number | Date;
-          promo_end: string | number | Date;
-        }) => {
-          if (!item.promo || !item.promo_start || !item.promo_end) {
-            return true;
-          }
-          const promoStart = normalizeDate(new Date(item.promo_start));
-          const promoEnd = normalizeDate(new Date(item.promo_end));
-          const normalizedCurrentDate = normalizeDate(wibDate);
-          return (
-            normalizedCurrentDate >= promoStart &&
-            normalizedCurrentDate <= promoEnd
-          );
-        }
-      );
-
       setMenuItems([
-        ...filteredItems,
+        ...(finalMenuData as MenuItem[]),
         {
           id: 0,
           name_menu: "Tambah Menu",
@@ -144,7 +122,7 @@ export default function MainCardMenu({
 
   useEffect(() => {
     fetchMenuItems();
-  }, [selectedCategory]);
+  }, [selectedCategory, menuSort]);
 
   useEffect(() => {
     const prefetchImages = async () => {
@@ -267,12 +245,10 @@ export default function MainCardMenu({
 
   const archiveMenuItem = async (item: MenuItem) => {
     try {
-      const { error } = await api
-        .from("menu")
-        .update({ is_archive: true, updated_at: new Date().toISOString() })
-        .eq("id", item.id);
-
-      if (error) throw error;
+      await request(`/v1/menus/${item.id}/archive`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_archive: true }),
+      });
 
       setMenuItems(menuItems.filter((menu) => menu.id !== item.id));
       await queryClient.invalidateQueries({ queryKey: ["menus"] });
@@ -311,6 +287,63 @@ export default function MainCardMenu({
     },
     list: {
       paddingHorizontal: 15,
+    },
+    toolbar: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 15,
+      paddingTop: 4,
+      paddingBottom: 12,
+    },
+    toolbarTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: colors.text,
+    },
+    sortButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      gap: 8,
+    },
+    sortButtonText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.text,
+    },
+    sortOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.25)",
+      justifyContent: "center",
+      alignItems: "center",
+      padding: 24,
+    },
+    sortMenu: {
+      width: "100%",
+      maxWidth: 320,
+      backgroundColor: colors.card,
+      borderRadius: 8,
+      paddingVertical: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    sortOption: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    sortOptionText: {
+      fontSize: 15,
+      color: colors.text,
+      fontWeight: "500",
     },
     row: {
       justifyContent: "flex-start",
@@ -508,7 +541,7 @@ export default function MainCardMenu({
       }
 
       const quantity = cart[item.id.toString()] || 0;
-      const hasPromo = item.promo && item.promo_price !== null;
+      const hasPromo = isPromoActive(item);
       const isOutOfStock = item.stock! <= 0;
 
       return (
@@ -609,10 +642,23 @@ export default function MainCardMenu({
     );
   }
 
+  const activeSortLabel = sortOptions.find((option) => option.value === menuSort)?.label || "Terbaru";
+  const renderToolbar = () => (
+    <View style={styles.toolbar}>
+      <Text style={styles.toolbarTitle}>Menu</Text>
+      <TouchableOpacity style={styles.sortButton} onPress={() => setSortModalVisible(true)}>
+        <Feather name="sliders" size={16} color={colors.primary} />
+        <Text style={styles.sortButtonText}>{activeSortLabel}</Text>
+        <Feather name="chevron-down" size={16} color={colors.textSecondary} />
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
         data={menuItems}
+        ListHeaderComponent={renderToolbar}
         renderItem={({ item }) => (
           <RenderItem
             item={item}
@@ -638,6 +684,37 @@ export default function MainCardMenu({
         windowSize={5}
         removeClippedSubviews={true}
       />
+
+      <Modal
+        transparent
+        visible={sortModalVisible}
+        animationType="fade"
+        onRequestClose={() => setSortModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.sortOverlay}
+          activeOpacity={1}
+          onPress={() => setSortModalVisible(false)}
+        >
+          <View style={styles.sortMenu}>
+            {sortOptions.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={styles.sortOption}
+                onPress={() => {
+                  setMenuSort(option.value);
+                  setSortModalVisible(false);
+                }}
+              >
+                <Text style={styles.sortOptionText}>{option.label}</Text>
+                {menuSort === option.value && (
+                  <Feather name="check" size={18} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Modal Action Menu */}
       <MenuActionModal

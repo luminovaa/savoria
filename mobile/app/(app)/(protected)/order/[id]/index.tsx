@@ -104,55 +104,13 @@ export default function OrderDetailsScreen() {
         }
       }
 
-      const { data: itemsData, error: itemsError } = await api
-        .from("order_items")
-        .select("*")
-        .eq("order_id", orderId);
-
-      if (itemsError) throw itemsError;
-
-      const enhancedItemsData = [];
-      for (const item of itemsData || []) {
-        let menuData = null;
-        if (item.menu_id) {
-          const { data: menu, error: menuError } = await api
-            .from("menu")
-            .select(
-              `
-                id,
-                name_menu,
-                price,
-                description,
-                images,
-                category:category_id (
-                  id,
-                  name_category
-                )
-              `
-            )
-            .eq("id", item.menu_id)
-            .single();
-
-          if (!menuError && menu) {
-            menuData = menu;
-          } else {
-            console.error("Error fetching menu item:", menuError);
-          }
-        }
-
-        enhancedItemsData.push({
-          ...item,
-          menu: menuData,
-        });
-      }
-
       const transformedOrder = {
         ...orderData,
         user: userData,
       };
 
       setOrder(transformedOrder as OrderDetail);
-      setOrderItems(enhancedItemsData as OrderItem[]);
+      setOrderItems((orderData.items || []) as OrderItem[]);
     } catch (error: any) {
       setError(error.message);
       Alert.alert("Error", "Gagal memuat detail pesanan");
@@ -388,6 +346,7 @@ export default function OrderDetailsScreen() {
     receiptText += `
   <C>${phoneText.slice(0, 32)}</C>
   <C>=============================</C>
+  <L>PELANGGAN: ${(order.customer || "-").slice(0, 15)}</L>
   <L>INV: ${order.invoice_number.slice(0, 15)}</L>
   <L>TGL: ${formatDatetoIndonesia(order.created_at)} - ${formatDatetoIndonesia2(order.created_at)}</L>
   <L>KASIR: ${(order.user?.full_name || "-").slice(0, 10)}</L>
@@ -822,6 +781,10 @@ export default function OrderDetailsScreen() {
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>No. Invoice</Text>
               <Text style={styles.infoValue}>{order.invoice_number}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Pelanggan</Text>
+              <Text style={styles.infoValue}>{order.customer || "-"}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Tanggal</Text>

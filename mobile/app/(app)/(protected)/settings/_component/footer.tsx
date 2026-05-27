@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, Image } from "react-native";
 import { Colors, Theme } from "../styles";
+import { APP_VERSION_LABEL } from "@/utils/app-config";
 
 type FooterSectionProps = {
   theme: Theme;
@@ -22,7 +23,7 @@ const FooterSection = ({ theme, styles, colors }: FooterSectionProps) => {
       />
       <Text style={styles.footerText}>© 2025 Develop By Neon Code</Text>
       <View style={styles.versionBadge}>
-        <Text style={styles.versionText}>v1.0.2</Text>
+        <Text style={styles.versionText}>{APP_VERSION_LABEL}</Text>
       </View>
     </View>
   );

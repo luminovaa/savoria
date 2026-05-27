@@ -2,7 +2,7 @@
   "expo": {
     "name": "Savoria",
     "slug": "savoria",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "platforms": ["android"],
     "screenOrientation": "unspecified",
     "icon": "./assets/logo/savoria-dark.png",

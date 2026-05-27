@@ -16,7 +16,7 @@ import {
 import { useTheme } from '@/hooks/use-theme';
 import { MenuItem } from '@/utils/types';
 import { Feather } from '@expo/vector-icons';
-import { api } from '@/utils/api';
+import { request } from '@/services/api-client';
 
 interface UpdateStockModalProps {
   visible: boolean;
@@ -34,12 +34,12 @@ export default function UpdateStockModal({
   const { colors } = useTheme();
   const [stockValue, setStockValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [operation, setOperation] = useState<'set' | 'add' | 'subtract'>('set');
+  const [operation, setOperation] = useState<'add' | 'subtract'>('add');
 
   useEffect(() => {
     if (menu && visible) {
-      setStockValue(menu.stock?.toString() || '0');
-      setOperation('set');
+      setStockValue('');
+      setOperation('add');
     }
   }, [menu, visible]);
 
@@ -58,44 +58,25 @@ export default function UpdateStockModal({
       return;
     }
 
-    let newStock = inputValue;
     const currentStock = menu.stock || 0;
-
-    // Calculate new stock based on operation
-    switch (operation) {
-      case 'add':
-        newStock = currentStock + inputValue;
-        break;
-      case 'subtract':
-        newStock = currentStock - inputValue;
-        if (newStock < 0) {
-          Alert.alert('Error', 'Stock tidak boleh kurang dari 0');
-          return;
-        }
-        break;
-      case 'set':
-      default:
-        newStock = inputValue;
-        break;
+    const previewStock = operation === 'add' ? currentStock + inputValue : currentStock - inputValue;
+    if (previewStock < 0) {
+      Alert.alert('Error', 'Stock tidak boleh kurang dari 0');
+      return;
     }
 
     try {
       setIsLoading(true);
-      
-      const { error } = await api
-        .from('menu')
-        .update({ 
-          stock: newStock,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', menu.id);
 
-      if (error) throw error;
+      const result = await request<{ stock: number }>(`/v1/menus/${menu.id}/stock`, {
+        method: 'PATCH',
+        body: JSON.stringify({ operation, quantity: inputValue }),
+      });
 
       // Call the callback to update the parent component
-      onStockUpdated(menu.id, newStock);
+      onStockUpdated(menu.id, result.stock);
       
-      Alert.alert('Sukses', `Stock berhasil diupdate menjadi ${newStock}`);
+      Alert.alert('Sukses', `Stock berhasil diupdate menjadi ${result.stock}`);
       onClose();
     } catch (error: any) {
       Alert.alert('Error', 'Gagal mengupdate stock: ' + error.message);
@@ -273,9 +254,8 @@ export default function UpdateStockModal({
         return currentStock + inputValue;
       case 'subtract':
         return Math.max(0, currentStock - inputValue);
-      case 'set':
       default:
-        return inputValue;
+        return currentStock + inputValue;
     }
   };
 
@@ -320,20 +300,6 @@ export default function UpdateStockModal({
                       <TouchableOpacity
                         style={[
                           styles.operationButton,
-                          operation === 'set' && styles.operationButtonActive
-                        ]}
-                        onPress={() => setOperation('set')}
-                      >
-                        <Text style={[
-                          styles.operationButtonText,
-                          operation === 'set' && styles.operationButtonTextActive
-                        ]}>
-                          Set
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.operationButton,
                           operation === 'add' && styles.operationButtonActive
                         ]}
                         onPress={() => setOperation('add')}
@@ -364,9 +330,7 @@ export default function UpdateStockModal({
 
                   <View style={styles.inputContainer}>
                     <Text style={styles.inputLabel}>
-                      {operation === 'set' ? 'Stock Baru:' : 
-                       operation === 'add' ? 'Jumlah Ditambah:' : 
-                       'Jumlah Dikurang:'}
+                      {operation === 'add' ? 'Jumlah Ditambah:' : 'Jumlah Dikurang:'}
                     </Text>
                     <TextInput
                       style={styles.textInput}

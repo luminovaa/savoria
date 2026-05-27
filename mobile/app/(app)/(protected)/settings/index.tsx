@@ -11,6 +11,7 @@ import SectionHeader from "./_component/section";
 import FooterSection from "./_component/footer";
 import { useRouter } from "expo-router";
 import { Linking } from "react-native";
+import { APP_VERSION_LABEL } from "@/utils/app-config";
 
 export default function SettingScreen() {
   const { theme, toggleTheme, colors } = useTheme() as {
@@ -101,7 +102,7 @@ export default function SettingScreen() {
           <SettingItem
             icon="info"
             title="Versi Aplikasi"
-            description="v1.0.2"
+            description={APP_VERSION_LABEL}
             onPress={() => {}}
             colors={colors}
             styles={styles}

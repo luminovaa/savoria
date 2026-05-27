@@ -30,6 +30,7 @@ export default function UsersListScreen() {
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
   const [selectedUser, setSelectedUser] = useState<UserList | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null); // State untuk menyimpan role pengguna
+  const isOwner = userRole === "Owner";
 
   useEffect(() => {
     fetchUsers();
@@ -42,6 +43,7 @@ export default function UsersListScreen() {
       if (!user)
         throw new Error("Gagal mendapatkan data pengguna");
       setUserRole(user.role);
+      setError(null);
     } catch (error: any) {
       setError(error.message);
       Alert.alert("Error", "Gagal memuat data role pengguna");
@@ -57,9 +59,12 @@ export default function UsersListScreen() {
         full_name: user.full_name || "-",
         role_name: user.role || "-",
       })));
+      setError(null);
     } catch (error: any) {
       setError(error.message);
-      Alert.alert("Error", "Gagal memuat daftar kasir");
+      if (users.length === 0) {
+        Alert.alert("Error", "Gagal memuat daftar kasir");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -79,6 +84,9 @@ export default function UsersListScreen() {
     user: UserList,
     event: { nativeEvent: { pageX: number; pageY: number } }
   ) => {
+    if (!isOwner) {
+      return;
+    }
     setSelectedUser(user);
     setModalPosition({
       x: event.nativeEvent.pageX,
@@ -116,7 +124,8 @@ export default function UsersListScreen() {
   const renderUserItem = ({ item }: { item: UserList }) => (
     <TouchableOpacity
       style={styles.userItem}
-      onLongPress={(event) => handleLongPress(item, event)}
+      onLongPress={isOwner ? (event) => handleLongPress(item, event) : undefined}
+      activeOpacity={isOwner ? 0.7 : 1}
     >
       <View style={styles.userIcon}>
         <Feather name="user" size={20} color={colors.primary} />
@@ -286,7 +295,7 @@ export default function UsersListScreen() {
           }
         />
       </View>
-      {userRole === "Owner" && (
+      {isOwner && (
         <View style={styles.addButtonContainer}>
           <TouchableOpacity style={styles.addButton} onPress={handleAddCashier}>
             <Feather name="plus" size={20} color={colors.buttonText} />
@@ -294,7 +303,7 @@ export default function UsersListScreen() {
           </TouchableOpacity>
         </View>
       )}
-      {userRole === "Owner" && (
+      {isOwner && (
         <UserActionModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}

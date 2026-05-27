@@ -6,12 +6,14 @@ import TypeCard from "./_component/type-card";
 import InvoiceCart from "./_component/invoice-card";
 import { widthPercentageToDP as wp } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
+import type { MenuSort } from "@/utils/types";
 
 export default function HomeScreen() {
   const { colors } = useTheme();
   const screenWidth = Dimensions.get("window").width;
   const isTablet = screenWidth > 600;
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [menuSort, setMenuSort] = useState<MenuSort>("newest");
   const [cart, setCart] = useState<{ [id: string]: number }>({});
 
   const styles = StyleSheet.create({
@@ -90,6 +92,8 @@ export default function HomeScreen() {
           <View style={styles.contentArea}>
             <MainCardMenu
               selectedCategory={selectedCategory}
+              menuSort={menuSort}
+              setMenuSort={setMenuSort}
               cart={cart}
               setCart={setCart}
             />
@@ -130,6 +134,8 @@ export default function HomeScreen() {
             <View style={styles.cardMenuContainer}>
               <MainCardMenu
                 selectedCategory={selectedCategory}
+                menuSort={menuSort}
+                setMenuSort={setMenuSort}
                 cart={cart}
                 setCart={setCart}
               />

@@ -10,6 +10,7 @@ export type SubmitOrderResult = {
 
 export function submitOrder(payload: {
   client_order_id: string;
+  customer?: string;
   items: { menu_id: number; quantity: number }[];
   payment_type: "cash" | "qris";
   paid: number | null;

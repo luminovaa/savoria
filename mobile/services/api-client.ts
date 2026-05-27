@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const ACCESS_KEY = "savoria_access_token";
 const REFRESH_KEY = "savoria_refresh_token";
+const sessionListeners = new Set<() => void>();
 
 if (!API_URL) {
   throw new Error("EXPO_PUBLIC_API_URL wajib dikonfigurasi");
@@ -33,6 +34,17 @@ async function setSession(session: AuthSession | null) {
   }
   await SecureStore.setItemAsync(ACCESS_KEY, session.access_token);
   await SecureStore.setItemAsync(REFRESH_KEY, session.refresh_token);
+}
+
+function notifySessionExpired() {
+  sessionListeners.forEach((listener) => listener());
+}
+
+export function onSessionExpired(listener: () => void) {
+  sessionListeners.add(listener);
+  return () => {
+    sessionListeners.delete(listener);
+  };
 }
 
 async function refresh(): Promise<boolean> {
@@ -66,6 +78,10 @@ export async function request<T>(path: string, init: RequestInit = {}, canRefres
   }
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: "Server bermasalah" }));
+    if (response.status === 401) {
+      await setSession(null);
+      notifySessionExpired();
+    }
     throw new Error(body.error || "Permintaan gagal");
   }
   if (response.status === 204) return undefined as T;

@@ -21,6 +21,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { Ionicons } from "@expo/vector-icons";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 
 const formSchema = z.object({
   email: z.string().email("Masukkan Email Yang Valid."),
@@ -34,6 +35,7 @@ export default function SignIn() {
   const { signInWithPassword } = useAuth();
   const { colors, theme } = useTheme();
   const [secureTextEntry, setSecureTextEntry] = React.useState(true);
+  const router = useRouter();
 
   const screenWidth = Dimensions.get("window").width;
   const isTablet = screenWidth > 600;
@@ -137,9 +139,9 @@ export default function SignIn() {
 
   async function onSubmit(data: z.infer<typeof formSchema>) {
     try {
-      const result = await signInWithPassword(data.email, data.password);
+      await signInWithPassword(data.email, data.password);
       form.reset();
-      console.log(result);
+      router.replace("/(app)/(protected)/home");
     } catch (error: any) {
       Alert.alert("Email Atau Password Salah");
       console.error("Sign in error:", error);

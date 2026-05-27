@@ -1,9 +1,8 @@
-import SplashScreenComponent from "@/app/(app)/welcome";
-import { authService, SessionUser } from "@/services/api-client";
-import { useRouter, useSegments, SplashScreen } from "expo-router";
+import { authService, onSessionExpired, SessionUser } from "@/services/api-client";
+import * as SplashScreen from "expo-splash-screen";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 type AuthContextProps = {
   user: SessionUser | null;
@@ -24,8 +23,6 @@ const AuthContext = createContext<AuthContextProps>({
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const segments = useSegments();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [appIsReady, setAppIsReady] = useState(false);
@@ -38,11 +35,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!initialized || !appIsReady) return;
-    const inProtectedGroup = (segments as readonly string[]).includes("(protected)");
-    if (user && !inProtectedGroup) router.replace("/(app)/(protected)/home");
-    if (!user && inProtectedGroup) router.replace("/(app)/welcome");
-  }, [appIsReady, initialized, router, segments, user]);
+    return onSessionExpired(() => setUser(null));
+  }, []);
+
+  useEffect(() => {
+    if (appIsReady) SplashScreen.hideAsync().catch(() => {});
+  }, [appIsReady]);
 
   async function signInWithPassword(email: string, password: string) {
     const session = await authService.login(email, password);
@@ -57,8 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const onLayoutRootView = useCallback(async () => {
     if (appIsReady) await SplashScreen.hideAsync();
   }, [appIsReady]);
-
-  if (!initialized || !appIsReady) return <SplashScreenComponent />;
 
   return (
     <AuthContext.Provider value={{ user, initialized, signInWithPassword, signOut, onLayoutRootView }}>

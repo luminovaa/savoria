@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import ImageResizer from 'react-native-image-resizer';
 import { api } from "@/utils/api";
+import { request } from "@/services/api-client";
 import { useTheme } from "@/hooks/use-theme";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -33,7 +34,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 const menuFormSchema = z.object({
   name_menu: z.string().min(1, "Nama menu wajib diisi"),
-  description: z.string().min(1, "Deskripsi wajib diisi"),
+  description: z.string().optional(),
   price: z.number().positive("Harga harus lebih dari 0"),
   category_id: z.number().positive("Kategori wajib dipilih"),
   promo: z.boolean().default(false),
@@ -43,6 +44,11 @@ const menuFormSchema = z.object({
 });
 
 type MenuFormData = z.infer<typeof menuFormSchema>;
+
+function appendMenuFormValue(body: FormData, key: string, value: string | number | boolean | null | undefined) {
+  if (value === null || value === undefined || value === "") return;
+  body.append(key, String(value));
+}
 
 interface Category {
   id: number;
@@ -207,13 +213,6 @@ export default function AddMenuScreen() {
 };
   const uploadImage = async (uri: string) => {
   try {
-    const response = await fetch(uri);
-    const arraybuffer = await response.arrayBuffer();
-
-    if (arraybuffer.byteLength > 5 * 1024 * 1024) {
-      throw new Error("Ukuran file terlalu besar. Maksimal 5MB");
-    }
-
     const fileType = uri.split(".").pop()?.toLowerCase() ?? "jpeg";
     if (!["jpeg", "png", "jpg"].includes(fileType)) {
       throw new Error(
@@ -222,11 +221,16 @@ export default function AddMenuScreen() {
     }
 
     const fileName = `menu-${Date.now()}.${fileType}`;
+    const mimeType = fileType === "jpg" ? "image/jpeg" : `image/${fileType}`;
 
     const { data, error } = await api.storage
       .from("file")
-      .upload(fileName, arraybuffer, {
-        contentType: `image/${fileType}`,
+      .upload(fileName, {
+        uri,
+        name: fileName,
+        type: mimeType,
+      }, {
+        contentType: mimeType,
         cacheControl: "3600",
         upsert: false,
       });
@@ -271,30 +275,27 @@ export default function AddMenuScreen() {
       }
 
       setLoading(true);
-      let imageUrl = null;
-
+      const body = new FormData();
+      appendMenuFormValue(body, "name_menu", form.name_menu.trim());
+      appendMenuFormValue(body, "description", form.description?.trim());
+      appendMenuFormValue(body, "price", form.price);
+      appendMenuFormValue(body, "category_id", form.category_id);
+      appendMenuFormValue(body, "stock", 0);
+      appendMenuFormValue(body, "promo", form.promo);
+      appendMenuFormValue(body, "promo_price", form.promo ? form.promo_price : null);
+      appendMenuFormValue(body, "promo_start", form.promo ? form.promo_start : null);
+      appendMenuFormValue(body, "promo_end", form.promo ? form.promo_end : null);
       if (image) {
-        imageUrl = await uploadImage(image);
+        const extension = image.split(".").pop()?.toLowerCase() || "jpg";
+        const type = extension === "png" ? "image/png" : "image/jpeg";
+        body.append("image", {
+          uri: image,
+          name: `menu-${Date.now()}.${extension}`,
+          type,
+        } as any);
       }
 
-      const { error } = await api.from("menu").insert({
-        name_menu: form.name_menu.trim(),
-        description: form.description.trim(),
-        price: form.price,
-        category_id: form.category_id,
-        images: imageUrl,
-        promo: form.promo,
-        promo_price: form.promo ? form.promo_price : null,
-        promo_start: form.promo ? form.promo_start : null,
-        promo_end: form.promo ? form.promo_end : null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
-      if (error) {
-        console.error("Error menyimpan menu:", error);
-        throw error;
-      }
+      await request("/v1/menus", { method: "POST", body });
       await queryClient.invalidateQueries({ queryKey: ["menus"] });
 
       Alert.alert("Sukses", "Menu berhasil ditambahkan");
@@ -584,7 +585,7 @@ export default function AddMenuScreen() {
               <View style={styles.fieldIcon}>
                 <Feather name="file-text" size={18} color={colors.primary} />
               </View>
-              <Text style={styles.label}>Deskripsi</Text>
+              <Text style={styles.label}>Deskripsi (disarankan)</Text>
             </View>
             <TextInput
               style={[
@@ -594,7 +595,7 @@ export default function AddMenuScreen() {
               ]}
               value={form.description}
               onChangeText={(value) => handleInputChange("description", value)}
-              placeholder="Masukkan deskripsi menu"
+              placeholder="Masukkan deskripsi menu agar lebih jelas"
               placeholderTextColor={colors.textSecondary}
               multiline
               numberOfLines={4}

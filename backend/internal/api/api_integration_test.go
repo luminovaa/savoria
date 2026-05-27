@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -94,7 +95,7 @@ func call(server *Server, method, path, token string, body any) *httptest.Respon
 func checkoutBody(id string, menuID int64, quantity int, paid float64) map[string]any {
 	return map[string]any{
 		"client_order_id": id, "items": []map[string]any{{"menu_id": menuID, "quantity": quantity}},
-		"payment_type": "cash", "paid": paid,
+		"payment_type": "cash", "paid": paid, "customer": "Budi",
 	}
 }
 
@@ -106,8 +107,95 @@ func TestRoleAuthorization(t *testing.T) {
 	if got := call(f.server, http.MethodGet, "/v1/menus", f.kasir, nil).Code; got != http.StatusOK {
 		t.Fatalf("kasir menus = %d, want 200", got)
 	}
-	if got := call(f.server, http.MethodPost, "/v1/menus", f.kasir, map[string]any{"name_menu": "X", "price": 1, "stock": 1}).Code; got != http.StatusForbidden {
-		t.Fatalf("kasir create menu = %d, want 403", got)
+	createMenu := call(f.server, http.MethodPost, "/v1/menus", f.kasir, map[string]any{"name_menu": "X", "price": 1, "stock": 1})
+	if got := createMenu.Code; got != http.StatusCreated {
+		t.Fatalf("kasir create menu = %d, want 201", got)
+	}
+	var created menu
+	_ = json.NewDecoder(createMenu.Body).Decode(&created)
+	if got := call(f.server, http.MethodPatch, "/v1/menus/"+strconv.FormatInt(created.ID, 10), f.kasir, map[string]any{"name_menu": "X Update", "price": 2, "stock": 2}).Code; got != http.StatusOK {
+		t.Fatalf("kasir update menu = %d, want 200", got)
+	}
+	stockUpdate := call(f.server, http.MethodPatch, "/v1/menus/"+strconv.FormatInt(created.ID, 10)+"/stock", f.kasir, map[string]any{"operation": "add", "quantity": 3})
+	if got := stockUpdate.Code; got != http.StatusOK {
+		t.Fatalf("kasir add stock = %d, want 200", got)
+	}
+	stockUpdate = call(f.server, http.MethodPatch, "/v1/menus/"+strconv.FormatInt(created.ID, 10)+"/stock", f.kasir, map[string]any{"operation": "subtract", "quantity": 2})
+	if got := stockUpdate.Code; got != http.StatusOK {
+		t.Fatalf("kasir subtract stock = %d, want 200", got)
+	}
+	if got := call(f.server, http.MethodPatch, "/v1/menus/"+strconv.FormatInt(created.ID, 10)+"/stock", f.kasir, map[string]any{"operation": "subtract", "quantity": 999}).Code; got != http.StatusConflict {
+		t.Fatalf("kasir over subtract stock = %d, want 409", got)
+	}
+	if got := call(f.server, http.MethodDelete, "/v1/menus/"+strconv.FormatInt(created.ID, 10), f.kasir, nil).Code; got != http.StatusNoContent {
+		t.Fatalf("kasir delete menu = %d, want 204", got)
+	}
+	if got := call(f.server, http.MethodGet, "/v1/users", f.kasir, nil).Code; got != http.StatusOK {
+		t.Fatalf("kasir list users = %d, want 200", got)
+	}
+	if got := call(f.server, http.MethodPost, "/v1/users", f.kasir, map[string]any{"email": "new@savoria.test", "full_name": "Kasir Baru", "password": "password-baru", "role_id": 2}).Code; got != http.StatusForbidden {
+		t.Fatalf("kasir create user = %d, want 403", got)
+	}
+	if got := call(f.server, http.MethodGet, "/v1/users/00000000-0000-0000-0000-000000000000", f.kasir, nil).Code; got != http.StatusForbidden {
+		t.Fatalf("kasir get user detail = %d, want 403", got)
+	}
+}
+
+func TestListMenusSortsInBackend(t *testing.T) {
+	f := fixture(t, 10)
+	ctx := context.Background()
+	var ownerID string
+	if err := f.server.DB.QueryRow(ctx, `select id from users where email='owner@savoria.test'`).Scan(&ownerID); err != nil {
+		t.Fatal(err)
+	}
+
+	var alphaID, zuluID int64
+	if err := f.server.DB.QueryRow(ctx, `insert into menus(name_menu,price,stock,created_at) values('Alpha',10000,10,now() - interval '2 days') returning id`).Scan(&alphaID); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.server.DB.QueryRow(ctx, `insert into menus(name_menu,price,stock,created_at) values('Zulu',10000,10,now() - interval '1 day') returning id`).Scan(&zuluID); err != nil {
+		t.Fatal(err)
+	}
+
+	az := call(f.server, http.MethodGet, "/v1/menus?sort=az", f.token, nil)
+	if got := az.Code; got != http.StatusOK {
+		t.Fatalf("sort az = %d, want 200", got)
+	}
+	var menus []menu
+	_ = json.NewDecoder(az.Body).Decode(&menus)
+	if len(menus) == 0 || menus[0].ID != alphaID {
+		t.Fatalf("sort az first = %+v, want id %d", menus, alphaID)
+	}
+
+	za := call(f.server, http.MethodGet, "/v1/menus?sort=za", f.token, nil)
+	if got := za.Code; got != http.StatusOK {
+		t.Fatalf("sort za = %d, want 200", got)
+	}
+	menus = nil
+	_ = json.NewDecoder(za.Body).Decode(&menus)
+	if len(menus) == 0 || menus[0].ID != zuluID {
+		t.Fatalf("sort za first = %+v, want id %d", menus, zuluID)
+	}
+
+	var completedOrderID, cancelledOrderID string
+	if err := f.server.DB.QueryRow(ctx, `insert into orders(client_order_id,invoice_number,total,total_amount,user_id,payment_type,status) values('sort-completed','SORT-COMPLETED',5,50000,$1,'cash','completed') returning id`, ownerID).Scan(&completedOrderID); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.server.DB.QueryRow(ctx, `insert into orders(client_order_id,invoice_number,total,total_amount,user_id,payment_type,status) values('sort-cancelled','SORT-CANCELLED',99,990000,$1,'cash','cancelled') returning id`, ownerID).Scan(&cancelledOrderID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.server.DB.Exec(ctx, `insert into order_items(order_id,menu_id,quantity,subtotal,price) values($1,$2,5,50000,10000),($3,$4,99,990000,10000)`, completedOrderID, alphaID, cancelledOrderID, zuluID); err != nil {
+		t.Fatal(err)
+	}
+
+	best := call(f.server, http.MethodGet, "/v1/menus?sort=bestseller", f.token, nil)
+	if got := best.Code; got != http.StatusOK {
+		t.Fatalf("sort bestseller = %d, want 200", got)
+	}
+	menus = nil
+	_ = json.NewDecoder(best.Body).Decode(&menus)
+	if len(menus) == 0 || menus[0].ID != alphaID {
+		t.Fatalf("sort bestseller first = %+v, want id %d", menus, alphaID)
 	}
 }
 
@@ -117,8 +205,14 @@ func TestCheckoutIdempotentAndValidatesPayment(t *testing.T) {
 	if got := call(f.server, http.MethodPost, "/v1/orders/checkout", f.token, body).Code; got != http.StatusCreated {
 		t.Fatalf("checkout = %d, want 201", got)
 	}
-	if got := call(f.server, http.MethodPost, "/v1/orders/checkout", f.token, body).Code; got != http.StatusOK {
+	retry := call(f.server, http.MethodPost, "/v1/orders/checkout", f.token, body)
+	if got := retry.Code; got != http.StatusOK {
 		t.Fatalf("retry = %d, want 200", got)
+	}
+	var result checkoutResult
+	_ = json.NewDecoder(retry.Body).Decode(&result)
+	if result.Customer != "Budi" {
+		t.Fatalf("retry customer = %q, want Budi", result.Customer)
 	}
 	var stock, count int
 	_ = f.server.DB.QueryRow(context.Background(), `select stock from menus where id=$1`, f.menuID).Scan(&stock)

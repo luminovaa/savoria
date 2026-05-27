@@ -1,5 +1,6 @@
 import { request } from "@/services/api-client";
 import { dataService } from "@/services/data-service";
+import type { MenuSort } from "@/utils/types";
 
 type Result<T = any> = { data: T | null; error: Error | null; count?: number | null };
 
@@ -55,7 +56,7 @@ class Query implements PromiseLike<Result> {
       else if (this.table === "orders" && id) data = await dataService.order(String(id));
       else if (this.table === "orders") data = await dataService.orders();
       else if (this.table === "menu" && id) data = await dataService.menu(id);
-      else if (this.table === "menu") data = await dataService.menus(this.filters.get("category_id"), this.archived);
+      else if (this.table === "menu") data = await dataService.menus(this.filters.get("category_id"), this.archived, this.menuSort());
       else if (this.table === "category") data = await dataService.categories();
       else if (this.table === "role") data = await dataService.roles();
       else if (this.table === "shop") data = await dataService.shop();
@@ -84,6 +85,13 @@ class Query implements PromiseLike<Result> {
     } catch (error) {
       return { data: null, error: error as Error };
     }
+  }
+
+  private menuSort(): MenuSort {
+    if (!this.sortBy) return "newest";
+    if (this.sortBy.field === "name_menu") return this.sortBy.ascending ? "az" : "za";
+    if (this.sortBy.field === "created_at") return this.sortBy.ascending ? "oldest" : "newest";
+    return "newest";
   }
 
   private async mutate(): Promise<Result> {
@@ -118,10 +126,14 @@ export const api = {
   storage: {
     from(_bucket: string) {
       return {
-        async upload(name: string, bytes: ArrayBuffer, _options?: unknown) {
+        async upload(name: string, file: ArrayBuffer | { uri: string; name: string; type: string }, _options?: unknown) {
           try {
             const body = new FormData();
-            body.append("file", new Blob([bytes as BlobPart]), name);
+            if (file instanceof ArrayBuffer) {
+              body.append("file", new Blob([file as BlobPart]), name);
+            } else {
+              body.append("file", file as any);
+            }
             const result = await request<{ publicUrl: string }>(`/v1/uploads/menu?public_id=${encodeURIComponent(name)}`, { method: "POST", body });
             uploaded.set(name, result.publicUrl);
             return { data: result, error: null };
