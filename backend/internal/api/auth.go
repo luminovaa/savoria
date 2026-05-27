@@ -13,8 +13,7 @@ import (
 type userResponse struct {
 	ID                 string `json:"id"`
 	Email              string `json:"email"`
-	FirstName          string `json:"first_name"`
-	LastName           string `json:"last_name"`
+	FullName           string `json:"full_name"`
 	RoleID             int16  `json:"role_id"`
 	Role               string `json:"role"`
 	Active             bool   `json:"active"`
@@ -39,11 +38,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var user userResponse
 	var passwordHash string
 	err := s.DB.QueryRow(r.Context(), `
-		select u.id, u.email, u.password_hash, u.first_name, u.last_name,
+		select u.id, u.email, u.password_hash, u.full_name,
 		       u.role_id, roles.name, u.active, u.must_change_password
 		  from users u join roles on roles.id = u.role_id
 		 where lower(u.email) = lower($1)`, strings.TrimSpace(input.Email)).
-		Scan(&user.ID, &user.Email, &passwordHash, &user.FirstName, &user.LastName,
+		Scan(&user.ID, &user.Email, &passwordHash, &user.FullName,
 			&user.RoleID, &user.Role, &user.Active, &user.MustChangePassword)
 	if err != nil || !user.Active || !security.VerifyPassword(input.Password, passwordHash) {
 		writeError(w, http.StatusUnauthorized, "email atau password salah")
@@ -82,11 +81,11 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 	var tokenID uuid.UUID
 	var user userResponse
 	err := s.DB.QueryRow(r.Context(), `
-		select rt.id, u.id, u.email, u.first_name, u.last_name, u.role_id, roles.name,
+		select rt.id, u.id, u.email, u.full_name, u.role_id, roles.name,
 		       u.active, u.must_change_password
 		  from refresh_tokens rt join users u on u.id=rt.user_id join roles on roles.id=u.role_id
 		 where rt.token_hash=$1 and rt.revoked_at is null and rt.expires_at > now() and u.active`, hash).
-		Scan(&tokenID, &user.ID, &user.Email, &user.FirstName, &user.LastName, &user.RoleID,
+		Scan(&tokenID, &user.ID, &user.Email, &user.FullName, &user.RoleID,
 			&user.Role, &user.Active, &user.MustChangePassword)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "refresh token tidak berlaku")
@@ -116,9 +115,9 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	var user userResponse
 	err := s.DB.QueryRow(r.Context(), `
-		select u.id, u.email, u.first_name, u.last_name, u.role_id, roles.name, u.active, u.must_change_password
+		select u.id, u.email, u.full_name, u.role_id, roles.name, u.active, u.must_change_password
 		from users u join roles on roles.id=u.role_id where u.id=$1`, currentUser(r).UserID).
-		Scan(&user.ID, &user.Email, &user.FirstName, &user.LastName, &user.RoleID, &user.Role, &user.Active, &user.MustChangePassword)
+		Scan(&user.ID, &user.Email, &user.FullName, &user.RoleID, &user.Role, &user.Active, &user.MustChangePassword)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "user tidak ditemukan")
 		return

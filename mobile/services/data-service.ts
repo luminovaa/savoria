@@ -8,7 +8,22 @@ export const dataService = {
     request<any[]>(`/v1/menus?archived=${archived}${categoryId ? `&category_id=${categoryId}` : ""}`),
   menu: (id: number | string) => request<any>(`/v1/menus/${id}`),
   shop: () => request<any>("/v1/shop"),
-  orders: () => request<any[]>("/v1/orders"),
+  orders: (params?: { month?: number; year?: number; limit?: number; offset?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.month) search.set("month", String(params.month));
+    if (params?.year) search.set("year", String(params.year));
+    if (params?.limit) search.set("limit", String(params.limit));
+    if (params?.offset) search.set("offset", String(params.offset));
+    const query = search.toString();
+    return request<any[]>(`/v1/orders${query ? `?${query}` : ""}`);
+  },
+  orderStats: (params?: { month?: number; year?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.month) search.set("month", String(params.month));
+    if (params?.year) search.set("year", String(params.year));
+    const query = search.toString();
+    return request<any>(`/v1/orders/stats${query ? `?${query}` : ""}`);
+  },
   order: (id: string) => request<any>(`/v1/orders/${id}`),
   create: (resource: string, value: any) => request<any>(`/v1/${resource}`, { method: "POST", body: JSON.stringify(value) }),
   update: (resource: string, id: string | number | null, value: any) =>

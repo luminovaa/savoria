@@ -50,7 +50,7 @@ func fixture(t *testing.T, stock int) integrationFixture {
 	ownerHash, _ := security.HashPassword("password-owner")
 	kasirHash, _ := security.HashPassword("password-kasir")
 	var menuID int64
-	_, err = pool.Exec(ctx, `insert into users(email,password_hash,first_name,role_id) values
+	_, err = pool.Exec(ctx, `insert into users(email,password_hash,full_name,role_id) values
 		('owner@savoria.test',$1,'Owner',1),('kasir@savoria.test',$2,'Kasir',2)`, ownerHash, kasirHash)
 	if err != nil {
 		t.Fatal(err)
@@ -164,7 +164,7 @@ func TestInactiveKasirActivatesOnlyAfterPasswordReset(t *testing.T) {
 	if err := f.server.DB.QueryRow(context.Background(), `update users set active=false,must_change_password=true where email='kasir@savoria.test' returning id`).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	editOnly := map[string]any{"email": "kasir@savoria.test", "first_name": "Kasir Baru", "last_name": "", "role_id": 2}
+	editOnly := map[string]any{"email": "kasir@savoria.test", "full_name": "Kasir Baru", "role_id": 2}
 	if got := call(f.server, http.MethodPatch, "/v1/users/"+id, f.token, editOnly).Code; got != http.StatusOK {
 		t.Fatalf("edit kasir = %d, want 200", got)
 	}

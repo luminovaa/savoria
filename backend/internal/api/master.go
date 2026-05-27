@@ -53,15 +53,15 @@ func (s *Server) listRoles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getProfile(w http.ResponseWriter, r *http.Request) {
-	var id, first, last, role string
+	var id, fullName, role string
 	var roleID int16
-	err := s.DB.QueryRow(r.Context(), `select u.id,u.first_name,u.last_name,u.role_id,roles.name from users u join roles on roles.id=u.role_id where u.id=$1`, chi.URLParam(r, "id")).
-		Scan(&id, &first, &last, &roleID, &role)
+	err := s.DB.QueryRow(r.Context(), `select u.id,u.full_name,u.role_id,roles.name from users u join roles on roles.id=u.role_id where u.id=$1`, chi.URLParam(r, "id")).
+		Scan(&id, &fullName, &roleID, &role)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "profil tidak ditemukan")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": id, "first_name": first, "last_name": last, "role_id": roleID, "role": map[string]string{"name": role}})
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "full_name": fullName, "role_id": roleID, "role": map[string]string{"name": role}})
 }
 
 func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {

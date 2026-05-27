@@ -65,7 +65,11 @@ class Query implements PromiseLike<Result> {
         for (const [key, value] of this.minValues) data = data.filter((item: any) => item[key] >= value);
         for (const [key, value] of this.maxValues) data = data.filter((item: any) => item[key] <= value);
         for (const [key, value] of this.filters) {
-          if (key.startsWith("neq:")) data = data.filter((item: any) => item[key.slice(4)] !== value);
+          if (key.startsWith("neq:")) {
+            data = data.filter((item: any) => item[key.slice(4)] !== value);
+          } else {
+            data = data.filter((item: any) => item[key] === value);
+          }
         }
         if (this.sortBy) {
           const { field, ascending } = this.sortBy;

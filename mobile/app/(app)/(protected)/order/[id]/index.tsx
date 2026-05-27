@@ -87,8 +87,7 @@ export default function OrderDetailsScreen() {
           .from("profiles")
           .select(
             `
-              first_name,
-              last_name,
+              full_name,
               role_id
             `
           )
@@ -391,7 +390,7 @@ export default function OrderDetailsScreen() {
   <C>=============================</C>
   <L>INV: ${order.invoice_number.slice(0, 15)}</L>
   <L>TGL: ${formatDatetoIndonesia(order.created_at)} - ${formatDatetoIndonesia2(order.created_at)}</L>
-  <L>KASIR: ${(order.user?.first_name || "-").slice(0, 10)}</L>
+  <L>KASIR: ${(order.user?.full_name || "-").slice(0, 10)}</L>
   <C>-----------------------------</C>`;
 
     const formatReceiptLine = (
@@ -854,7 +853,7 @@ export default function OrderDetailsScreen() {
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Kasir</Text>
                 <Text style={styles.infoValue}>
-                  {order.user.first_name} {order.user.last_name}
+                  {order.user.full_name}
                 </Text>
               </View>
             )}

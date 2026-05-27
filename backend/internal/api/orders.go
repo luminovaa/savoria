@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -97,14 +98,15 @@ func (s *Server) checkout(w http.ResponseWriter, r *http.Request) {
 		changes = *input.Paid - totalAmount
 	}
 
-	_, err = tx.Exec(r.Context(), `select pg_advisory_xact_lock(hashtext(to_char(current_date,'YYYYMMDD')))`)
+	dateKey := time.Now().Format("20060102")
+	_, err = tx.Exec(r.Context(), `select pg_advisory_xact_lock(hashtext($1))`, dateKey)
 	if err != nil {
 		conflictOrServer(w, err)
 		return
 	}
 	var sequence int
 	_ = tx.QueryRow(r.Context(), `select count(*)+1 from orders where created_at >= current_date and created_at < current_date + interval '1 day'`).Scan(&sequence)
-	invoice := fmt.Sprintf("INV-%s-%02d", time.Now().Format("0102"), sequence)
+	invoice := fmt.Sprintf("INV-%s-%04d", dateKey, sequence)
 	var orderID string
 	err = tx.QueryRow(r.Context(), `insert into orders(client_order_id,invoice_number,total,total_amount,paid,changes,user_id,payment_type,status)
 		values($1,$2,$3,$4,$5,$6,$7,$8,'completed') returning id`,
@@ -132,8 +134,22 @@ func (s *Server) checkout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listOrders(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.DB.Query(r.Context(), `select o.id,o.created_at,o.invoice_number,o.total,o.total_amount,o.payment_type,o.status,o.user_id,u.first_name,u.last_name
-		from orders o join users u on u.id=o.user_id order by o.created_at desc limit 500`)
+	limit := parseBoundedInt(r.URL.Query().Get("limit"), 500, 1, 500)
+	offset := parseBoundedInt(r.URL.Query().Get("offset"), 0, 0, 1000000)
+	month, _ := strconv.Atoi(r.URL.Query().Get("month"))
+	year, _ := strconv.Atoi(r.URL.Query().Get("year"))
+
+	where := ""
+	args := []any{limit, offset}
+	if month >= 1 && month <= 12 && year >= 2000 && year <= 2100 {
+		start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local)
+		end := start.AddDate(0, 1, 0)
+		where = "where o.created_at >= $3 and o.created_at < $4"
+		args = append(args, start, end)
+	}
+
+	rows, err := s.DB.Query(r.Context(), fmt.Sprintf(`select o.id,o.created_at,o.invoice_number,o.total,o.total_amount,o.payment_type,o.status,o.user_id,u.full_name
+		from orders o join users u on u.id=o.user_id %s order by o.created_at desc limit $1 offset $2`, where), args...)
 	if err != nil {
 		conflictOrServer(w, err)
 		return
@@ -141,28 +157,95 @@ func (s *Server) listOrders(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	result := []map[string]any{}
 	for rows.Next() {
-		var id, invoice, payment, status, userID, first, last string
+		var id, invoice, payment, status, userID, fullName string
 		var created time.Time
 		var total int
 		var amount float64
-		_ = rows.Scan(&id, &created, &invoice, &total, &amount, &payment, &status, &userID, &first, &last)
+		_ = rows.Scan(&id, &created, &invoice, &total, &amount, &payment, &status, &userID, &fullName)
 		result = append(result, map[string]any{"id": id, "created_at": created, "invoice_number": invoice,
 			"total": total, "total_amount": amount, "payment_type": payment, "status": status, "user_id": userID,
-			"user": map[string]string{"first_name": first, "last_name": last}})
+			"user": map[string]string{"full_name": fullName}})
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) orderStats(w http.ResponseWriter, r *http.Request) {
+	month, _ := strconv.Atoi(r.URL.Query().Get("month"))
+	year, _ := strconv.Atoi(r.URL.Query().Get("year"))
+	now := time.Now()
+	if month < 1 || month > 12 {
+		month = int(now.Month())
+	}
+	if year < 2000 || year > 2100 {
+		year = now.Year()
+	}
+
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	todayEnd := todayStart.AddDate(0, 0, 1)
+	monthStart := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local)
+	monthEnd := monthStart.AddDate(0, 1, 0)
+	yearStart := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, time.Local)
+	yearEnd := yearStart.AddDate(1, 0, 0)
+
+	var todayOrders int
+	var todayRevenue, monthlyRevenue, yearlyRevenue float64
+	err := s.DB.QueryRow(r.Context(), `select count(*), coalesce(sum(total_amount),0)
+		from orders where created_at >= $1 and created_at < $2 and lower(status) <> 'cancelled'`, todayStart, todayEnd).
+		Scan(&todayOrders, &todayRevenue)
+	if err != nil {
+		conflictOrServer(w, err)
+		return
+	}
+
+	if currentUser(r).Role == "Owner" {
+		err = s.DB.QueryRow(r.Context(), `select coalesce(sum(total_amount),0)
+			from orders where created_at >= $1 and created_at < $2 and lower(status) <> 'cancelled'`, monthStart, monthEnd).
+			Scan(&monthlyRevenue)
+		if err != nil {
+			conflictOrServer(w, err)
+			return
+		}
+		err = s.DB.QueryRow(r.Context(), `select coalesce(sum(total_amount),0)
+			from orders where created_at >= $1 and created_at < $2 and lower(status) <> 'cancelled'`, yearStart, yearEnd).
+			Scan(&yearlyRevenue)
+		if err != nil {
+			conflictOrServer(w, err)
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"today_orders":    todayOrders,
+		"today_revenue":   todayRevenue,
+		"monthly_revenue": monthlyRevenue,
+		"yearly_revenue":  yearlyRevenue,
+	})
+}
+
+func parseBoundedInt(value string, fallback int, min int, max int) int {
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	if parsed < min {
+		return min
+	}
+	if parsed > max {
+		return max
+	}
+	return parsed
 }
 
 func (s *Server) getOrder(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var order map[string]any
-	var orderID, invoice, payment, status, userID, first, last string
+	var orderID, invoice, payment, status, userID, fullName string
 	var created time.Time
 	var total int
 	var amount, paid, changes float64
-	err := s.DB.QueryRow(r.Context(), `select o.id,o.created_at,o.invoice_number,o.total,o.total_amount,coalesce(o.paid,0),o.changes,o.payment_type,o.status,o.user_id,u.first_name,u.last_name
+	err := s.DB.QueryRow(r.Context(), `select o.id,o.created_at,o.invoice_number,o.total,o.total_amount,coalesce(o.paid,0),o.changes,o.payment_type,o.status,o.user_id,u.full_name
 		from orders o join users u on u.id=o.user_id where o.id=$1`, id).
-		Scan(&orderID, &created, &invoice, &total, &amount, &paid, &changes, &payment, &status, &userID, &first, &last)
+		Scan(&orderID, &created, &invoice, &total, &amount, &paid, &changes, &payment, &status, &userID, &fullName)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "order tidak ditemukan")
 		return
@@ -184,6 +267,6 @@ func (s *Server) getOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	order = map[string]any{"id": orderID, "created_at": created, "invoice_number": invoice, "total": total,
 		"total_amount": amount, "paid": paid, "changes": changes, "payment_type": payment, "status": status,
-		"user_id": userID, "user": map[string]string{"first_name": first, "last_name": last}, "items": items}
+		"user_id": userID, "user": map[string]string{"full_name": fullName}, "items": items}
 	writeJSON(w, http.StatusOK, order)
 }

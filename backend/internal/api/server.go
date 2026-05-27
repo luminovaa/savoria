@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -56,7 +56,7 @@ func New(ctx context.Context, cfg config.Config) (*Server, error) {
 
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer)
+	r.Use(middleware.RequestID, middleware.RealIP, s.requestLogger, s.recoverer)
 	r.Use(s.cors)
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -75,6 +75,7 @@ func (s *Server) Router() http.Handler {
 			r.Get("/menus/{id}", s.getMenu)
 			r.Get("/shop", s.getShop)
 			r.Get("/orders", s.listOrders)
+			r.Get("/orders/stats", s.orderStats)
 			r.Get("/orders/{id}", s.getOrder)
 			r.Post("/orders/checkout", s.checkout)
 			r.Group(func(r chi.Router) {
@@ -160,7 +161,7 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(body); err != nil {
-		log.Printf("encode response: %v", err)
+		slog.Error("encode_response", "error", err)
 	}
 }
 

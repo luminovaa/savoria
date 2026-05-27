@@ -95,6 +95,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       setMenuItems([]);
       setLoading(false);
       clientOrderId.current = null;
+      setInvoiceNumber("");
     }
   }, [cart]);
 
@@ -281,8 +282,18 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       setBluetoothDevices(devices);
       setModalVisible(true);
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/No Device Found/i.test(message)) {
+        console.warn("No Bluetooth printer found");
+        Alert.alert(
+          "Info",
+          "Pesanan tersimpan, tetapi tidak ada printer Bluetooth yang ditemukan."
+        );
+        return;
+      }
+
       console.error("Scan error:", error);
-      Alert.alert("Error", `Gagal memindai perangkat Bluetooth: ${error}`);
+      Alert.alert("Error", `Gagal memindai perangkat Bluetooth: ${message}`);
     } finally {
       setPrinting(false);
     }
@@ -302,6 +313,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       setPaidAmount(null);
       setChanges(null);
       setConfirmedTotal(null);
+      setInvoiceNumber("");
       clientOrderId.current = null;
       Alert.alert("Sukses", "Pesanan tersimpan dan struk berhasil dicetak");
     } catch (error) {
@@ -544,7 +556,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       color: colors.text,
     },
     container: {
-      flex: 1,
+      flex: isTablet ? 1 : 0,
       paddingHorizontal: isTablet ? 0 : 10,
     },
     header: {
@@ -740,7 +752,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       marginLeft: 8,
     },
     emptyContainer: {
-      flex: 1,
+      flex: isTablet ? 1 : 0,
       justifyContent: "center",
       alignItems: "center",
       paddingVertical: 30,
@@ -933,7 +945,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
         )}
       </View>
 
-      {menuItems.length > 0 && (
+      {menuItems.length > 0 && invoiceNumber !== "" && (
         <View style={styles.invoiceNumberContainer}>
           <Feather
             name="file-text"

@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,23 +11,29 @@ import (
 
 	"savoria/backend/internal/api"
 	"savoria/backend/internal/config"
+	"savoria/backend/internal/logger"
 )
 
 func main() {
 	cfg, err := config.Load()
+	appLogger := logger.New(cfg)
+	slog.SetDefault(appLogger)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("config_error", "error", err)
+		os.Exit(1)
 	}
 	server, err := api.New(context.Background(), cfg)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("database_error", "error", err)
+		os.Exit(1)
 	}
 	defer server.DB.Close()
 	httpServer := &http.Server{Addr: cfg.HTTPAddr, Handler: server.Router(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
-		log.Printf("savoria api listening on %s", cfg.HTTPAddr)
+		slog.Info("server_starting", "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
+			slog.Error("server_error", "error", err)
+			os.Exit(1)
 		}
 	}()
 	stop := make(chan os.Signal, 1)
@@ -35,5 +41,9 @@ func main() {
 	<-stop
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_ = httpServer.Shutdown(ctx)
+	if err := httpServer.Shutdown(ctx); err != nil {
+		slog.Error("server_error", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("server_stopped")
 }

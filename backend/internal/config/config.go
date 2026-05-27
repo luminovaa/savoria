@@ -7,6 +7,7 @@ import (
 )
 
 type Config struct {
+	AppEnv              string
 	HTTPAddr            string
 	PublicAPIURL        string
 	DatabaseURL         string
@@ -14,6 +15,8 @@ type Config struct {
 	AccessTokenTTL      time.Duration
 	RefreshTokenTTL     time.Duration
 	CORSOrigin          string
+	LogLevel            string
+	LogFormat           string
 	CloudinaryCloudName string
 	CloudinaryAPIKey    string
 	CloudinaryAPISecret string
@@ -21,15 +24,18 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
+		AppEnv:              value("APP_ENV", "development"),
 		HTTPAddr:            value("HTTP_ADDR", ":8080"),
 		PublicAPIURL:        value("PUBLIC_API_URL", "http://localhost:8080"),
 		DatabaseURL:         os.Getenv("DATABASE_URL"),
 		AccessTokenSecret:   os.Getenv("ACCESS_TOKEN_SECRET"),
 		CORSOrigin:          value("CORS_ORIGIN", "*"),
+		LogLevel:            value("LOG_LEVEL", "info"),
 		CloudinaryCloudName: os.Getenv("CLOUDINARY_CLOUD_NAME"),
 		CloudinaryAPIKey:    os.Getenv("CLOUDINARY_API_KEY"),
 		CloudinaryAPISecret: os.Getenv("CLOUDINARY_API_SECRET"),
 	}
+	cfg.LogFormat = value("LOG_FORMAT", defaultLogFormat(cfg.AppEnv))
 	if cfg.DatabaseURL == "" {
 		return cfg, errors.New("DATABASE_URL is required")
 	}
@@ -53,4 +59,11 @@ func value(name, fallback string) string {
 		return current
 	}
 	return fallback
+}
+
+func defaultLogFormat(appEnv string) string {
+	if appEnv == "production" {
+		return "json"
+	}
+	return "text"
 }

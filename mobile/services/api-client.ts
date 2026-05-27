@@ -11,8 +11,7 @@ if (!API_URL) {
 export type SessionUser = {
   id: string;
   email: string;
-  first_name: string;
-  last_name: string;
+  full_name: string;
   role_id: number;
   role: string;
   active: boolean;

@@ -54,8 +54,7 @@ export default function UsersListScreen() {
       setUsers(data.map((user: any) => ({
         id: user.id,
         email: user.email || "",
-        first_name: user.first_name || "-",
-        last_name: user.last_name || "-",
+        full_name: user.full_name || "-",
         role_name: user.role || "-",
       })));
     } catch (error: any) {
@@ -91,7 +90,7 @@ export default function UsersListScreen() {
   const confirmDeleteUser = (user: UserList) => {
     Alert.alert(
       "Konfirmasi Hapus",
-      `Apakah Anda yakin ingin menghapus kasir ${user.first_name} ${user.last_name}?`,
+      `Apakah Anda yakin ingin menghapus kasir ${user.full_name || "-"}?`,
       [
         { text: "Batal", style: "cancel" },
         {
@@ -124,7 +123,7 @@ export default function UsersListScreen() {
       </View>
       <View style={styles.userInfo}>
         <Text style={[styles.userEmail, { color: colors.text }]}>
-          {capitalizeText(item.first_name + " " + item.last_name)}
+          {capitalizeText(item.full_name || "-")}
         </Text>
         <Text style={[styles.userMeta, { color: colors.textSecondary }]}>
           Email: {item.email}

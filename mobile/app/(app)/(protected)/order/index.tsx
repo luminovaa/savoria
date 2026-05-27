@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -10,8 +10,8 @@ import {
   RefreshControl,
   Dimensions,
 } from "react-native";
-import { api } from "@/utils/api";
 import { authService } from "@/services/api-client";
+import { dataService } from "@/services/data-service";
 import { useTheme } from "@/hooks/use-theme";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -24,15 +24,21 @@ export default function OrderHistoryScreen() {
   const { colors, theme } = useTheme();
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
+  const didInitialLoad = useRef(false);
   const LIMIT = 10;
   const [userRole, setUserRole] = useState<string | null>(null); 
+  const [stats, setStats] = useState({
+    todayOrders: 0,
+    todayRevenue: 0,
+    monthlyRevenue: 0,
+    yearlyRevenue: 0,
+  });
 
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
@@ -41,86 +47,13 @@ export default function OrderHistoryScreen() {
   const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
   const isTablet = SCREEN_WIDTH > 600;
 
-  const stats = useMemo(() => {
-    
-    if (!allOrders.length) {
-      return {
-        todayOrders: 0,
-        todayRevenue: 0,
-        monthlyRevenue: 0,
-        yearlyRevenue: 0
-      };
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const todayOrdersArray = allOrders.filter(order => {
-      const orderDate = new Date(order.created_at);
-      orderDate.setHours(0, 0, 0, 0);
-      const isToday = orderDate.getTime() === today.getTime();
-      const isNotCancelled = order.status.toLowerCase() !== 'cancelled';
-      return isToday && isNotCancelled;
-    });
-
-    const todayRevenue = todayOrdersArray.reduce((sum, order) => 
-      sum + (order.total_amount || 0), 0);
-
-    const monthlyOrdersArray = allOrders.filter(order => {
-      const orderDate = new Date(order.created_at);
-      return orderDate.getMonth() + 1 === selectedMonth && 
-             orderDate.getFullYear() === selectedYear &&
-             order.status.toLowerCase() !== 'cancelled';
-    });
-
-    const monthlyRevenue = monthlyOrdersArray.reduce((sum, order) => 
-      sum + (order.total_amount || 0), 0);
-
-    const yearlyOrdersArray = allOrders.filter(order => {
-      const orderDate = new Date(order.created_at);
-      return orderDate.getFullYear() === selectedYear &&
-             order.status.toLowerCase() !== 'cancelled';
-    });
-
-    const yearlyRevenue = yearlyOrdersArray.reduce((sum, order) => 
-      sum + (order.total_amount || 0), 0);
-
-    const result = {
-      todayOrders: todayOrdersArray.length,
-      todayRevenue,
-      monthlyRevenue,
-      yearlyRevenue
-    };
-
-    return result;
-  }, [allOrders, selectedMonth, selectedYear]);
-
    const fetchUserRole = useCallback(async () => {
     try {
-      // Ambil data pengguna yang sedang login
       const user = await authService.sessionUser();
       const authError = user ? null : new Error("Sesi berakhir");
       if (authError || !user) throw new Error("Gagal mendapatkan data pengguna");
 
-      // Ambil data profil pengguna berdasarkan user.id
-      const { data: profile, error: profileError } = await api
-        .from("profiles")
-        .select("role_id")
-        .eq("id", user.id)
-        .single();
-
-      if (profileError || !profile) throw new Error("Gagal mendapatkan data profil");
-
-      // Ambil nama role dari tabel role berdasarkan role_id
-      const { data: role, error: roleError } = await api
-        .from("role")
-        .select("name")
-        .eq("id", profile.role_id)
-        .single();
-
-      if (roleError || !role) throw new Error("Gagal mendapatkan data role");
-
-      setUserRole(role.name);
+      setUserRole(user.role);
     } catch (error: any) {
       setError(error.message);
       Alert.alert("Error", "Gagal memuat data role pengguna");
@@ -128,31 +61,24 @@ export default function OrderHistoryScreen() {
   }, []);
 
 
-  const fetchAllOrders = useCallback(async () => {
+  const fetchStats = useCallback(async () => {
     try {
-      setLoading(true);
-
-      const { data, error } = await api
-        .from("orders")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error('Error fetching all orders:', error);
-        throw error;
-      }
-
-      const orderData = data || [];
-      
-      setAllOrders(orderData);
-      return orderData;
+      const data = await dataService.orderStats({
+        month: selectedMonth,
+        year: selectedYear,
+      });
+      setStats({
+        todayOrders: data.today_orders || 0,
+        todayRevenue: data.today_revenue || 0,
+        monthlyRevenue: data.monthly_revenue || 0,
+        yearlyRevenue: data.yearly_revenue || 0,
+      });
     } catch (error: any) {
-      console.error('fetchAllOrders error:', error);
+      console.error('fetchStats error:', error);
       setError(error.message);
-      Alert.alert("Error", "Gagal memuat data pesanan");
-      return [];
+      Alert.alert("Error", "Gagal memuat ringkasan pesanan");
     }
-  }, []);
+  }, [selectedMonth, selectedYear]);
 
   const fetchOrders = useCallback(async (pageNumber = 0, refresh = false) => {
     try {
@@ -163,31 +89,12 @@ export default function OrderHistoryScreen() {
       }
 
       const from = pageNumber * LIMIT;
-      const to = from + LIMIT - 1;
-
-      let query = api
-        .from("orders")
-        .select("*", { count: "exact" })
-        .order("created_at", { ascending: false });
-
-      const startDate = new Date(selectedYear, selectedMonth - 1, 1);
-      const endDate = new Date(selectedYear, selectedMonth, 0);
-      endDate.setHours(23, 59, 59, 999);
-
-      query = query.gte('created_at', startDate.toISOString())
-                   .lte('created_at', endDate.toISOString());
-
-      if (pageNumber > 0) {
-        query = query.range(from, to);
-      } else {
-        query = query.limit(LIMIT);
-      }
-
-      const { data, error, count } = await query;
-
-      if (error) throw error;
-
-      const orderData = data || [];
+      const orderData = await dataService.orders({
+        month: selectedMonth,
+        year: selectedYear,
+        limit: LIMIT,
+        offset: from,
+      }) || [];
       
       const ordersWithCheckedIds = orderData.map((order: any) => {
         if (!order.id) {
@@ -226,32 +133,31 @@ export default function OrderHistoryScreen() {
   // Initial load - fetch all orders first, then filtered orders
   useEffect(() => {
     const loadInitialData = async () => {
-      // Fetch all orders first for stats
-      await fetchAllOrders();
-      // Then fetch filtered orders for display
+      await fetchStats();
       await fetchOrders(0, true);
+      didInitialLoad.current = true;
     };
     
     loadInitialData();
     fetchUserRole();
   }, []); // Only run once on mount
 
-  // When month/year changes, only fetch filtered orders (allOrders already loaded)
+  // When month/year changes, refresh stats and filtered order list.
   useEffect(() => {
-    if (allOrders.length > 0) { // Only if we already have all orders loaded
-      fetchOrders(0, true);
-    }
+    if (!didInitialLoad.current) return;
+    setOrders([]);
+    setPage(0);
+    setHasMore(true);
+    fetchStats();
+    fetchOrders(0, true);
   }, [selectedMonth, selectedYear]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     setHasMore(true);
-    
-    // Fetch all orders first for updated stats
-    await fetchAllOrders();
-    // Then fetch filtered orders
+    await fetchStats();
     await fetchOrders(0, true);
-  }, [fetchOrders, fetchAllOrders]);
+  }, [fetchOrders, fetchStats]);
 
   const handleLoadMore = useCallback(() => {
     if (!loadingMore && hasMore) {
@@ -356,7 +262,7 @@ export default function OrderHistoryScreen() {
             {(userRole !== 'Kasir') && (
               <>
               <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Bulan Ini</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Bulan Dipilih</Text>
                 <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.monthlyRevenue)}</Text>
               </View>
               <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -380,16 +286,18 @@ export default function OrderHistoryScreen() {
                 <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.todayRevenue)}</Text>
               </View>
             </View>
-            <View style={styles.statsRow}>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Bulan Ini</Text>
-                <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.monthlyRevenue)}</Text>
+            {(userRole !== 'Kasir') && (
+              <View style={styles.statsRow}>
+                <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Bulan Dipilih</Text>
+                  <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.monthlyRevenue)}</Text>
+                </View>
+                <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Tahun Ini</Text>
+                  <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.yearlyRevenue)}</Text>
+                </View>
               </View>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pendapatan Tahun Ini</Text>
-                <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.yearlyRevenue)}</Text>
-              </View>
-            </View>
+            )}
           </>
         )}
       </View>
@@ -650,6 +558,7 @@ export default function OrderHistoryScreen() {
         )}
 
         <FlatList
+          key={`${selectedYear}-${selectedMonth}`}
           data={orders}
           renderItem={renderOrderItem}
           keyExtractor={(item) => `order-item-${item.id}`}

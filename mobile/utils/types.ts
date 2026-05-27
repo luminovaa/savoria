@@ -12,16 +12,14 @@ export type UserList = {
   id: string;
   email: string;
   last_sign_in_at?: string;
-  first_name?: string;
-  last_name?: string;
+  full_name?: string;
   role?: Role;
   role_name?: string;
 };
 
 export type ProfileWithRole = {
   id: string;
-  first_name?: string;
-  last_name?: string;
+  full_name?: string;
   role_id?: string;
   role?: { name: string };  // This matches the structure from your Supabase query
 }
@@ -94,8 +92,7 @@ export type OrderDetail = {
   changes: number
   user?: {
     email: string;
-    first_name: string;
-    last_name: string;
+    full_name: string;
   };
 };
 

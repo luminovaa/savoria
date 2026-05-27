@@ -23,8 +23,7 @@ import { Role } from "@/utils/types";
 const userFormSchema = z.object({
   email: z.string().email("Email tidak valid").min(1, "Email wajib diisi"),
   password: z.string().min(6, "Kata sandi minimal 6 karakter").max(100).optional().or(z.literal("")),
-  first_name: z.string().min(1, "Nama depan wajib diisi"),
-  last_name: z.string().min(1, "Nama belakang wajib diisi"),
+  full_name: z.string().min(1, "Nama wajib diisi"),
   role_id: z.number().int().positive("Peran wajib dipilih"),
 });
 
@@ -37,8 +36,7 @@ export default function EditUserScreen() {
   const [form, setForm] = useState<UserFormData>({
     email: "",
     password: "",
-    first_name: "",
-    last_name: "",
+    full_name: "",
     role_id: 0,
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -72,8 +70,7 @@ export default function EditUserScreen() {
       setForm({
         email: userData.email || "",
         password: "",
-        first_name: userData.first_name || "",
-        last_name: userData.last_name || "",
+        full_name: userData.full_name || "",
         role_id: userData.role_id || 0,
       });
 
@@ -145,8 +142,7 @@ export default function EditUserScreen() {
         userId: userId as string,
         email: form.email.trim(),
         password: form.password?.trim() || undefined,
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
+        full_name: form.full_name.trim(),
         role_id: form.role_id,
       });
 
@@ -389,32 +385,16 @@ export default function EditUserScreen() {
                 <View style={styles.fieldIcon}>
                   <Feather name="user" size={18} color={colors.primary} />
                 </View>
-                <Text style={styles.label}>Nama Depan</Text>
+                <Text style={styles.label}>Nama</Text>
               </View>
               <TextInput
-                style={[styles.input, formErrors.first_name ? styles.inputError : null]}
-                value={form.first_name}
-                onChangeText={(text) => handleInputChange("first_name", text)}
-                placeholder="Masukkan nama depan"
+                style={[styles.input, formErrors.full_name ? styles.inputError : null]}
+                value={form.full_name}
+                onChangeText={(text) => handleInputChange("full_name", text)}
+                placeholder="Masukkan nama"
                 placeholderTextColor={colors.textSecondary}
               />
-              {formErrors.first_name && <Text style={styles.errorText}>{formErrors.first_name}</Text>}
-            </View>
-            <View style={styles.fieldContainer}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={styles.fieldIcon}>
-                  <Feather name="user" size={18} color={colors.primary} />
-                </View>
-                <Text style={styles.label}>Nama Belakang</Text>
-              </View>
-              <TextInput
-                style={[styles.input, formErrors.last_name ? styles.inputError : null]}
-                value={form.last_name}
-                onChangeText={(text) => handleInputChange("last_name", text)}
-                placeholder="Masukkan nama belakang"
-                placeholderTextColor={colors.textSecondary}
-              />
-              {formErrors.last_name && <Text style={styles.errorText}>{formErrors.last_name}</Text>}
+              {formErrors.full_name && <Text style={styles.errorText}>{formErrors.full_name}</Text>}
             </View>
             <View style={styles.fieldContainer}>
               <View style={{ flexDirection: "row", alignItems: "center" }}>

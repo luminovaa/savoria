@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!initialized || !appIsReady) return;
-    const inProtectedGroup = segments.includes("(protected)");
+    const inProtectedGroup = (segments as readonly string[]).includes("(protected)");
     if (user && !inProtectedGroup) router.replace("/(app)/(protected)/home");
     if (!user && inProtectedGroup) router.replace("/(app)/welcome");
   }, [appIsReady, initialized, router, segments, user]);

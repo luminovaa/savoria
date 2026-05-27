@@ -1,11 +1,5 @@
 import React, { useState } from "react";
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Dimensions,
-  FlatList,
-} from "react-native";
+import { View, StyleSheet, ScrollView, Dimensions } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import MainCardMenu from "./_component/menu-card";
 import TypeCard from "./_component/type-card";
@@ -54,6 +48,7 @@ export default function HomeScreen() {
       paddingRight: isTablet ? 20 : 10,
       paddingLeft: isTablet ? 20 : 10,
       height: isTablet ? "97%" : "auto", // Ensure full height for tablet
+      marginBottom: isTablet ? 0 : 10,
     },
     cardInvoiceContainer: {
       backgroundColor: colors.card,
@@ -123,6 +118,13 @@ export default function HomeScreen() {
             </View>
           </View>
 
+          {/* InvoiceCart */}
+          <View style={styles.rightSidebar}>
+            <View style={styles.cardInvoiceContainer}>
+              <InvoiceCart cart={cart} setCart={setCart} />
+            </View>
+          </View>
+
           {/* MainCardMenu */}
           <View style={styles.contentArea}>
             <View style={styles.cardMenuContainer}>
@@ -131,13 +133,6 @@ export default function HomeScreen() {
                 cart={cart}
                 setCart={setCart}
               />
-            </View>
-          </View>
-
-          {/* InvoiceCart */}
-          <View style={styles.rightSidebar}>
-            <View style={styles.cardInvoiceContainer}>
-              <InvoiceCart cart={cart} setCart={setCart} />
             </View>
           </View>
         </ScrollView>

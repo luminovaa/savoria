@@ -123,16 +123,16 @@ func (i importer) execute(ctx context.Context) error {
 }
 
 func (i importer) importUsers(ctx context.Context, tx pgx.Tx) error {
-	rows, err := i.source.Query(ctx, `select p.id,u.email,coalesce(p.first_name,''),coalesce(p.last_name,''),p.role_id,u.created_at from public.profiles p join auth.users u on u.id=p.id`)
+	rows, err := i.source.Query(ctx, `select p.id,u.email,trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')),p.role_id,u.created_at from public.profiles p join auth.users u on u.id=p.id`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, email, first, last string
+		var id, email, fullName string
 		var role int16
 		var created any
-		if err := rows.Scan(&id, &email, &first, &last, &role, &created); err != nil {
+		if err := rows.Scan(&id, &email, &fullName, &role, &created); err != nil {
 			return err
 		}
 		password := i.ownerPass
@@ -146,9 +146,9 @@ func (i importer) importUsers(ctx context.Context, tx pgx.Tx) error {
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `insert into users(id,email,password_hash,first_name,last_name,role_id,active,must_change_password,created_at)
-			values($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict(id) do update set email=excluded.email,first_name=excluded.first_name,last_name=excluded.last_name,role_id=excluded.role_id`,
-			id, email, hash, first, last, role, active, mustChange, created)
+		_, err = tx.Exec(ctx, `insert into users(id,email,password_hash,full_name,role_id,active,must_change_password,created_at)
+			values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(id) do update set email=excluded.email,full_name=excluded.full_name,role_id=excluded.role_id`,
+			id, email, hash, fullName, role, active, mustChange, created)
 		if err != nil {
 			return err
 		}
@@ -223,8 +223,8 @@ func (i importer) copySimple(ctx context.Context, tx pgx.Tx) error {
 		query  string
 		insert string
 	}{
-		{`select id,name,address,phone,wifi_name,wifi_password,created_at,updated_at from public.shop`, `insert into shops(id,name,address,phone,wifi_name,wifi_password,created_at,updated_at) values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(id) do nothing`},
-		{`select id,'import-' || id::text,invoice_number,total,total_amount,paid,changes,user_id,payment_type,status,created_at from public.orders`, `insert into orders(id,client_order_id,invoice_number,total,total_amount,paid,changes,user_id,payment_type,status,created_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict(id) do nothing`},
+		{`select 1,name,address,phone,wifi_name,wifi_password,created_at,updated_at from public.shop order by created_at limit 1`, `insert into shops(id,name,address,phone,wifi_name,wifi_password,created_at,updated_at) values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(id) do update set name=excluded.name,address=excluded.address,phone=excluded.phone,wifi_name=excluded.wifi_name,wifi_password=excluded.wifi_password,updated_at=excluded.updated_at`},
+		{`with numbered as (select id,'import-' || id::text as client_order_id,total,total_amount,paid,coalesce(changes,0) as changes,user_id,payment_type,status,created_at,row_number() over(partition by created_at::date order by created_at,id) as daily_sequence from public.orders) select id,client_order_id,'INV-' || to_char(created_at,'YYYYMMDD') || '-' || lpad(daily_sequence::text,4,'0') as invoice_number,total,total_amount,paid,changes,user_id,payment_type,status,created_at from numbered`, `insert into orders(id,client_order_id,invoice_number,total,total_amount,paid,changes,user_id,payment_type,status,created_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict(id) do nothing`},
 		{`select id,order_id,menu_id,quantity,subtotal,price,created_at from public.order_items`, `insert into order_items(id,order_id,menu_id,quantity,subtotal,price,created_at) values($1,$2,$3,$4,$5,$6,$7) on conflict(id) do nothing`},
 	}
 	for _, task := range statements {

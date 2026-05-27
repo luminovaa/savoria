@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -9,7 +10,7 @@ import (
 )
 
 func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.DB.Query(r.Context(), `select u.id,u.email,u.first_name,u.last_name,u.role_id,roles.name,u.active,u.must_change_password from users u join roles on roles.id=u.role_id order by u.created_at`)
+	rows, err := s.DB.Query(r.Context(), `select u.id,u.email,u.full_name,u.role_id,roles.name,u.active,u.must_change_password from users u join roles on roles.id=u.role_id order by u.created_at`)
 	if err != nil {
 		conflictOrServer(w, err)
 		return
@@ -18,7 +19,7 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	users := []userResponse{}
 	for rows.Next() {
 		var u userResponse
-		if rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.RoleID, &u.Role, &u.Active, &u.MustChangePassword) == nil {
+		if rows.Scan(&u.ID, &u.Email, &u.FullName, &u.RoleID, &u.Role, &u.Active, &u.MustChangePassword) == nil {
 			users = append(users, u)
 		}
 	}
@@ -27,8 +28,8 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getUser(w http.ResponseWriter, r *http.Request) {
 	var u userResponse
-	err := s.DB.QueryRow(r.Context(), `select u.id,u.email,u.first_name,u.last_name,u.role_id,roles.name,u.active,u.must_change_password from users u join roles on roles.id=u.role_id where u.id=$1`, chi.URLParam(r, "id")).
-		Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.RoleID, &u.Role, &u.Active, &u.MustChangePassword)
+	err := s.DB.QueryRow(r.Context(), `select u.id,u.email,u.full_name,u.role_id,roles.name,u.active,u.must_change_password from users u join roles on roles.id=u.role_id where u.id=$1`, chi.URLParam(r, "id")).
+		Scan(&u.ID, &u.Email, &u.FullName, &u.RoleID, &u.Role, &u.Active, &u.MustChangePassword)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "user tidak ditemukan")
 		return
@@ -37,17 +38,21 @@ func (s *Server) getUser(w http.ResponseWriter, r *http.Request) {
 }
 
 type userInput struct {
-	Email     string `json:"email"`
-	Password  string `json:"password"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	RoleID    int16  `json:"role_id"`
-	Active    *bool  `json:"active"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	FullName string `json:"full_name"`
+	RoleID   int16  `json:"role_id"`
+	Active   *bool  `json:"active"`
 }
 
 func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 	var input userInput
-	if !decodeJSON(w, r, &input) || input.Email == "" || len(input.Password) < 8 || input.RoleID < 1 || input.RoleID > 2 {
+	if !decodeJSON(w, r, &input) || input.Email == "" || input.FullName == "" || len(input.Password) < 8 || input.RoleID < 1 || input.RoleID > 2 {
+		return
+	}
+	input.FullName = strings.TrimSpace(input.FullName)
+	if input.FullName == "" {
+		writeError(w, http.StatusBadRequest, "nama wajib diisi")
 		return
 	}
 	hash, err := security.HashPassword(input.Password)
@@ -60,10 +65,10 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		active = *input.Active
 	}
 	var u userResponse
-	err = s.DB.QueryRow(r.Context(), `insert into users(email,password_hash,first_name,last_name,role_id,active) values($1,$2,$3,$4,$5,$6)
-		returning id,email,first_name,last_name,role_id,(select name from roles where id=$5),active,must_change_password`,
-		input.Email, hash, input.FirstName, input.LastName, input.RoleID, active).
-		Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.RoleID, &u.Role, &u.Active, &u.MustChangePassword)
+	err = s.DB.QueryRow(r.Context(), `insert into users(email,password_hash,full_name,role_id,active) values($1,$2,$3,$4,$5)
+		returning id,email,full_name,role_id,(select name from roles where id=$4),active,must_change_password`,
+		input.Email, hash, input.FullName, input.RoleID, active).
+		Scan(&u.ID, &u.Email, &u.FullName, &u.RoleID, &u.Role, &u.Active, &u.MustChangePassword)
 	if err != nil {
 		conflictOrServer(w, err)
 		return
@@ -73,9 +78,10 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	var input userInput
-	if !decodeJSON(w, r, &input) || input.Email == "" || input.RoleID < 1 || input.RoleID > 2 {
+	if !decodeJSON(w, r, &input) || input.Email == "" || strings.TrimSpace(input.FullName) == "" || input.RoleID < 1 || input.RoleID > 2 {
 		return
 	}
+	input.FullName = strings.TrimSpace(input.FullName)
 	passwordReset := input.Password != ""
 	if input.Password != "" {
 		if len(input.Password) < 8 {
@@ -93,9 +99,9 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	tag, err := s.DB.Exec(r.Context(), `update users set email=$1,first_name=$2,last_name=$3,role_id=$4,
-		active=case when $5::boolean is not null then $5 when $7 then true else active end,updated_at=now() where id=$6`,
-		input.Email, input.FirstName, input.LastName, input.RoleID, input.Active, chi.URLParam(r, "id"), passwordReset)
+	tag, err := s.DB.Exec(r.Context(), `update users set email=$1,full_name=$2,role_id=$3,
+		active=case when $4::boolean is not null then $4 when $6 then true else active end,updated_at=now() where id=$5`,
+		input.Email, input.FullName, input.RoleID, input.Active, chi.URLParam(r, "id"), passwordReset)
 	if err != nil || tag.RowsAffected() == 0 {
 		writeError(w, http.StatusNotFound, "user tidak ditemukan")
 		return
