@@ -177,7 +177,7 @@ func (i importer) importCategories(ctx context.Context, tx pgx.Tx) error {
 }
 
 func (i importer) importMenus(ctx context.Context, tx pgx.Tx) error {
-	rows, err := i.source.Query(ctx, `select id,name_menu,description,price,category_id,coalesce(images,''),promo,stock,promo_price,promo_start,promo_end,is_deleted,is_archive,created_at,updated_at from public.menu`)
+	rows, err := i.source.Query(ctx, `select id,name_menu,description,price,category_id,coalesce(images,''),promo,stock,promo_price,promo_start::text,promo_end::text,is_deleted,is_archive,created_at,updated_at from public.menu`)
 	if err != nil {
 		return err
 	}
