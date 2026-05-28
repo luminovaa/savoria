@@ -8,11 +8,41 @@ services:
     env_file:
       - ../backend/.env
     ports:
-      - "127.0.0.1:${API_HOST_PORT:-8080}:8080"
+      - "8080:8080"
     networks:
       - postgres
+
+  migrate:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: savoria-api:latest
+    restart: "no"
+    env_file:
+      - ../backend/.env
+    entrypoint: ["/savoria-migrate"]
+    working_dir: /
+    networks:
+      - postgres
+    profiles:
+      - tools
+
+  import-supabase:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: savoria-api:latest
+    restart: "no"
+    env_file:
+      - ../backend/.env
+    entrypoint: ["/savoria-import-supabase"]
+    command: ["--dry-run"]
+    networks:
+      - postgres
+    profiles:
+      - tools
 
 networks:
   postgres:
     external: true
-    name: ${POSTGRES_DOCKER_NETWORK:?set POSTGRES_DOCKER_NETWORK to the existing PostgreSQL Docker network}
+    name: ${POSTGRES_DOCKER_NETWORK:-global-net}
