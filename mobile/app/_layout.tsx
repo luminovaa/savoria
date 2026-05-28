@@ -10,7 +10,7 @@ import { QueryProvider } from "@/providers/query-provider";
 
 function RootLayoutNav() {
   const { onLayoutRootView } = useAuth();
-  const { theme } = useTheme();
+  const { colors, theme } = useTheme();
   const [isMobile, setIsMobile] = useState(true);
 
   useEffect(() => {
@@ -21,7 +21,10 @@ function RootLayoutNav() {
   }, []);
 
   return (
-    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+    <View
+      style={{ flex: 1, backgroundColor: colors.background }}
+      onLayout={onLayoutRootView}
+    >
       <StatusBar style={theme === "dark" ? "light" : "dark"} hidden={!isMobile} />
       <Slot />
     </View>

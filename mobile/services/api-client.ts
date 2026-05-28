@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const ACCESS_KEY = "savoria_access_token";
 const REFRESH_KEY = "savoria_refresh_token";
+const USER_KEY = "savoria_session_user";
 const sessionListeners = new Set<() => void>();
 
 if (!API_URL) {
@@ -26,14 +27,37 @@ export type AuthSession = {
   expires_at: string;
 };
 
+class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function setSession(session: AuthSession | null) {
   if (!session) {
     await SecureStore.deleteItemAsync(ACCESS_KEY);
     await SecureStore.deleteItemAsync(REFRESH_KEY);
+    await SecureStore.deleteItemAsync(USER_KEY);
     return;
   }
   await SecureStore.setItemAsync(ACCESS_KEY, session.access_token);
   await SecureStore.setItemAsync(REFRESH_KEY, session.refresh_token);
+  await SecureStore.setItemAsync(USER_KEY, JSON.stringify(session.user));
+}
+
+async function getCachedUser() {
+  const rawUser = await SecureStore.getItemAsync(USER_KEY);
+  if (!rawUser) return null;
+
+  try {
+    return JSON.parse(rawUser) as SessionUser;
+  } catch {
+    await SecureStore.deleteItemAsync(USER_KEY);
+    return null;
+  }
 }
 
 function notifySessionExpired() {
@@ -56,7 +80,9 @@ async function refresh(): Promise<boolean> {
     body: JSON.stringify({ refresh_token: token }),
   });
   if (!response.ok) {
-    await setSession(null);
+    if (response.status === 401) {
+      await setSession(null);
+    }
     return false;
   }
   await setSession((await response.json()) as AuthSession);
@@ -82,7 +108,7 @@ export async function request<T>(path: string, init: RequestInit = {}, canRefres
       await setSession(null);
       notifySessionExpired();
     }
-    throw new Error(body.error || "Permintaan gagal");
+    throw new ApiError(body.error || "Permintaan gagal", response.status);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
@@ -99,9 +125,14 @@ export const authService = {
   },
   async sessionUser() {
     try {
-      return await request<SessionUser>("/v1/auth/me");
-    } catch {
-      return null;
+      const user = await request<SessionUser>("/v1/auth/me");
+      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+      return user;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        return null;
+      }
+      return getCachedUser();
     }
   },
   async logout() {

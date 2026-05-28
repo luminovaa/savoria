@@ -3,12 +3,13 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { useRouter, useSegments } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const MobileNavbar = () => {
   const { colors } = useTheme();
   const router = useRouter();
   const segments = useSegments();
+  const insets = useSafeAreaInsets();
 
   const isTabActive = (path: any) => {
     const currentPath = `/${segments.join("/")}`;
@@ -24,16 +25,20 @@ const MobileNavbar = () => {
       flexDirection: "row",
       justifyContent: "space-around",
       alignItems: "center",
-      height: 60,
+      height: 60 + insets.bottom,
       backgroundColor: colors.card,
       borderTopWidth: 1,
       borderTopColor: colors.border,
       paddingHorizontal: 12,
+      paddingBottom: insets.bottom,
     },
     tabItem: {
       alignItems: "center",
       justifyContent: "center",
-      padding: 12,
+      minHeight: 60,
+      paddingHorizontal: 12,
+      paddingTop: 8,
+      paddingBottom: 8,
       flex: 1,
     },
     activeTabItem: {
@@ -52,7 +57,6 @@ const MobileNavbar = () => {
   });
 
   return (
-    <SafeAreaView edges={['bottom']} >
     <View style={styles.bottomTabs}>
       <TouchableOpacity
         style={[
@@ -142,7 +146,6 @@ const MobileNavbar = () => {
         </Text>
       </TouchableOpacity>
     </View>
-    </SafeAreaView>
   );
 };
 

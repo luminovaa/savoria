@@ -4,6 +4,7 @@ import {
   Alert,
   Linking,
   Modal,
+  NativeModules,
   PermissionsAndroid,
   Platform,
   Text,
@@ -12,6 +13,7 @@ import {
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { BLEPrinter } from "react-native-thermal-receipt-printer";
+import * as EPToolkit from "react-native-thermal-receipt-printer/dist/utils/EPToolkit";
 
 import {
   capitalizeText,
@@ -36,6 +38,7 @@ export type ReceiptShop = {
 export type CheckoutReceiptInput = {
   shopData: ReceiptShop;
   customer: string;
+  cashier?: string;
   invoiceNumber: string;
   paymentType: string;
   total: number;
@@ -91,6 +94,8 @@ type PrinterPickerModalProps = {
   styles: any;
   description: string;
 };
+
+const RNBLEPrinter = NativeModules.RNBLEPrinter;
 
 export function PrinterPickerModal({
   animationType = "fade",
@@ -284,10 +289,13 @@ export function useReceiptPrinter(options: UseReceiptPrinterOptions) {
     setPrinting(true);
     try {
       await BLEPrinter.connectPrinter(innerMacAddress);
-      await BLEPrinter.printBill(receiptText, {
+      const buffer = EPToolkit.exchange_text(`${receiptText}\n\n\n`, {
+        encoding: "GBK",
         cut: true,
         beep: true,
-        encoding: "GBK",
+      } as any);
+      RNBLEPrinter.printRawData(buffer.toString("base64"), (error: string) => {
+        if (error) console.warn(error);
       });
     } finally {
       setPrinting(false);
@@ -359,157 +367,186 @@ function formatReceiptLine(left: string, right: string, width = 32): string {
   return `<L>${left}${spaces}${right}</L>`;
 }
 
-export function buildCheckoutReceiptText({
-  shopData,
-  customer,
-  invoiceNumber,
-  paymentType,
-  total,
-  paid,
-  changes,
-  items,
-}: CheckoutReceiptInput) {
-  const shopName = shopData.name.toUpperCase();
-  const addressLines = splitLongText(shopData.address, 32);
-  const phoneText = `Telp: ${shopData.phone}`;
+const RECEIPT_WIDTH = 32;
+const RECEIPT_LINE = "===============================";
+const RECEIPT_DASH = "-------------------------------";
+const LABEL_WIDTH = 10;
 
-  let receiptText = `
-  <C>=============================</C>
-  <C>** ${shopName.slice(0, 32)} **</C>`;
+function cleanReceiptText(value?: string | null) {
+  return (value || "").replace(/\s+/g, " ").trim();
+}
+
+function receiptCurrency(value: number) {
+  return formatCurrency2(value);
+}
+
+function buildKeyValueLines(label: string, value?: string | null) {
+  const safeValue = cleanReceiptText(value) || "-";
+  const valueWidth = RECEIPT_WIDTH - LABEL_WIDTH;
+  const valueLines = splitTextToLines(safeValue, valueWidth, 3);
+  const safeLabel = label.slice(0, LABEL_WIDTH - 1).padEnd(LABEL_WIDTH, " ");
+
+  return valueLines
+    .map((line, index) => {
+      const prefix = index === 0 ? safeLabel : " ".repeat(LABEL_WIDTH);
+      return `<L>${prefix}${line}</L>`;
+    })
+    .join("\n");
+}
+
+function buildReceiptHeader(shopData: ReceiptShop) {
+  const shopName = cleanReceiptText(shopData.name).toUpperCase();
+  const addressLines = splitLongText(cleanReceiptText(shopData.address), RECEIPT_WIDTH);
+  const phoneText = cleanReceiptText(shopData.phone)
+    ? `Telp: ${cleanReceiptText(shopData.phone)}`
+    : "";
+
+  let receiptText = `<C>${RECEIPT_LINE}</C>
+<C>${shopName.slice(0, RECEIPT_WIDTH)}</C>`;
 
   addressLines.forEach((line) => {
-    receiptText += `
-  <C>${line}</C>`;
+    if (!line) return;
+    receiptText += `\n<C>${line}</C>`;
   });
 
-  receiptText += `
-  <C>${phoneText.slice(0, 32)}</C>
-  <C>=============================</C>
-  <L>PELANGGAN: ${(customer.trim() || "-").slice(0, 15)}</L>
-  <L>INV: ${invoiceNumber.slice(0, 15)}</L>
-  <L>TGL: ${formatDatetoIndonesia(
-    new Date().toISOString()
-  )} - ${formatDatetoIndonesia2(new Date().toISOString())} </L>
-  <L>TIPE: ${paymentType.toUpperCase().slice(0, 10)}</L>
-  <C>-----------------------------</C>`;
-
-  items.forEach((item) => {
-    const itemName = capitalizeText(item.name_menu) || "Item";
-    const quantityText = `${item.quantity}x`;
-    const subtotalText = formatCurrency2(item.subtotal);
-    const itemNameLines = splitTextToLines(itemName, 18);
-    const formattedLine = formatReceiptLine(
-      `${quantityText} ${itemNameLines[0] || ""}`,
-      subtotalText,
-      32
-    );
-    receiptText += `\n${formattedLine}`;
-
-    if (itemNameLines.length > 1) {
-      receiptText += `\n<L>  ${itemNameLines[1]}</L>`;
-    }
-  });
-  receiptText += `
-<C>-----------------------------</C>
-<L>TOTAL:<R>${formatCurrency2(total)}</R></L>`;
-  if (paid !== null) {
-    receiptText += `
-<L>DIBAYAR:<R>${formatCurrency2(paid)}</R></L>`;
-    if (changes! > 0) {
-      receiptText += `
-<C>-----------------------------</C>
-<L>KEMBALI:<R>${formatCurrency2(changes || 0)}</R></L>`;
-    }
+  if (phoneText) {
+    receiptText += `\n<C>${phoneText.slice(0, RECEIPT_WIDTH)}</C>`;
   }
 
-  receiptText += `
-<C>=============================</C>
-<C>*** TERIMA KASIH ***</C>
-<C>Barang yang dibeli</C>
-<C>tidak dapat ditukar</C>`;
+  receiptText += `\n<C>${RECEIPT_LINE}</C>`;
+  return receiptText;
+}
+
+function buildReceiptInfo(input: {
+  invoice: string;
+  createdAt: string;
+  customer?: string | null;
+  cashier?: string | null;
+}) {
+  const lines = [
+    buildKeyValueLines("Invoice", input.invoice),
+    buildKeyValueLines(
+      "Tanggal",
+      `${formatDatetoIndonesia(input.createdAt)} ${formatDatetoIndonesia2(input.createdAt)}`
+    ),
+    buildKeyValueLines("Pelanggan", input.customer),
+  ];
+
+  if (cleanReceiptText(input.cashier)) {
+    lines.push(buildKeyValueLines("Kasir", input.cashier));
+  }
+
+  return lines.join("\n");
+}
+
+function buildReceiptItems(
+  items: Array<{ name: string; quantity: number; subtotal: number }>
+) {
+  return items
+    .map((item) => {
+      const amount = receiptCurrency(item.subtotal);
+      const firstLineWidth = Math.max(8, RECEIPT_WIDTH - amount.length - 1);
+      const itemName = capitalizeText(cleanReceiptText(item.name)) || "Item";
+      const itemLines = splitTextToLines(`${item.quantity}x ${itemName}`, firstLineWidth, 3);
+      let text = formatReceiptLine(itemLines[0] || "Item", amount, RECEIPT_WIDTH);
+
+      itemLines.slice(1).forEach((line) => {
+        text += `\n<L>   ${line.slice(0, RECEIPT_WIDTH - 3)}</L>`;
+      });
+
+      return text;
+    })
+    .join("\n");
+}
+
+function buildPaymentSummary(input: {
+  total: number;
+  paid?: number | null;
+  changes?: number | null;
+}) {
+  let text = formatReceiptLine("TOTAL", receiptCurrency(input.total), RECEIPT_WIDTH);
+
+  if (input.paid !== null && input.paid !== undefined) {
+    text += `\n${formatReceiptLine("Dibayar", receiptCurrency(input.paid), RECEIPT_WIDTH)}`;
+  }
+
+  if ((input.changes || 0) > 0) {
+    text += `\n${formatReceiptLine("Kembali", receiptCurrency(input.changes || 0), RECEIPT_WIDTH)}`;
+  }
+
+  return text;
+}
+
+function buildReceiptFooter(shopData: ReceiptShop) {
+  let receiptText = `<C>TERIMA KASIH</C>
+<C>Barang yang dibeli tidak</C>
+<C>dapat ditukar</C>`;
+
   if (shopData.wifi_name) {
-    receiptText += `
-  <C>-----------------------------</C>
-  <C>Wifi: ${shopData.wifi_name.slice(0, 32)}</C>`;
+    receiptText += `\n\n<C>Wifi: ${cleanReceiptText(shopData.wifi_name).slice(0, 26)}</C>`;
 
     if (shopData.wifi_password) {
-      receiptText += `
-    <C>Password: ${shopData.wifi_password.slice(0, 32)}</C>`;
+      receiptText += `\n<C>Password: ${cleanReceiptText(shopData.wifi_password).slice(0, 22)}</C>`;
     }
   }
 
   return receiptText;
 }
 
+export function buildCheckoutReceiptText({
+  shopData,
+  customer,
+  cashier,
+  invoiceNumber,
+  total,
+  paid,
+  changes,
+  items,
+}: CheckoutReceiptInput) {
+  const createdAt = new Date().toISOString();
+  const receiptItems = items.map((item) => ({
+    name: item.name_menu,
+    quantity: item.quantity,
+    subtotal: item.subtotal,
+  }));
+
+  return `${buildReceiptHeader(shopData)}
+${buildReceiptInfo({
+  invoice: invoiceNumber,
+  createdAt,
+  customer,
+  cashier,
+})}
+<C>${RECEIPT_DASH}</C>
+${buildReceiptItems(receiptItems)}
+<C>${RECEIPT_DASH}</C>
+${buildPaymentSummary({ total, paid, changes })}
+
+${buildReceiptFooter(shopData)}`;
+}
+
 export function buildDetailReceiptText({ shopData, order, items }: DetailReceiptInput) {
-  const shopName = shopData.name.toUpperCase();
-  const addressLines = splitLongText(shopData.address, 32);
-  const phoneText = `Telp: ${shopData.phone}`;
+  const receiptItems = items.map((item) => ({
+    name: item.menu?.name_menu || "Item",
+    quantity: item.quantity,
+    subtotal: item.subtotal,
+  }));
 
-  let receiptText = `
-  <C>=============================</C>
-  <C>** ${shopName.slice(0, 32)} **</C>`;
+  return `${buildReceiptHeader(shopData)}
+${buildReceiptInfo({
+  invoice: order.invoice_number,
+  createdAt: order.created_at,
+  customer: order.customer,
+  cashier: order.user?.full_name,
+})}
+<C>${RECEIPT_DASH}</C>
+${buildReceiptItems(receiptItems)}
+<C>${RECEIPT_DASH}</C>
+${buildPaymentSummary({
+  total: order.total_amount,
+  paid: order.paid,
+  changes: order.changes,
+})}
 
-  addressLines.forEach((line) => {
-    receiptText += `
-  <C>${line}</C>`;
-  });
-
-  receiptText += `
-  <C>${phoneText.slice(0, 32)}</C>
-  <C>=============================</C>
-  <L>PELANGGAN: ${(order.customer || "-").slice(0, 15)}</L>
-  <L>INV: ${order.invoice_number.slice(0, 15)}</L>
-  <L>TGL: ${formatDatetoIndonesia(order.created_at)} - ${formatDatetoIndonesia2(order.created_at)}</L>
-  <L>KASIR: ${(order.user?.full_name || "-").slice(0, 10)}</L>
-  <C>-----------------------------</C>`;
-
-  items.forEach((item) => {
-    const itemName = capitalizeText(item.menu?.name_menu) || "Item";
-    const quantityText = `${item.quantity}x`;
-    const subtotalText = formatCurrency2(item.subtotal);
-    const itemNameLines = splitTextToLines(itemName, 18);
-    const formattedLine = formatReceiptLine(
-      `${quantityText} ${itemNameLines[0] || ""}`,
-      subtotalText,
-      32
-    );
-    receiptText += `\n${formattedLine}`;
-
-    if (itemNameLines.length > 1) {
-      receiptText += `\n<L>  ${itemNameLines[1]}</L>`;
-    }
-  });
-  receiptText += `
-<C>-----------------------------</C>
-<L>TOTAL:<R>${formatCurrency2(order.total_amount)}</R></L>`;
-  if (order.paid !== null) {
-    receiptText += `
-    <L>DIBAYAR:<R>${formatCurrency2(order.paid || 0)}</R></L>`;
-    if (order.changes! > 0) {
-      receiptText += `
-<C>-----------------------------</C>
-<L>KEMBALI:<R>${formatCurrency2(order.changes || 0)}</R></L>`;
-    }
-  }
-
-  receiptText += `
-<C>=============================</C>
-<C>*** TERIMA KASIH ***</C>
-<C>Barang yang dibeli</C>
-<C>tidak dapat ditukar</C>`;
-
-  if (shopData.wifi_name) {
-    receiptText += `
-  <C>-----------------------------</C>
-  <C>WiFi Toko</C>
-  <C>${shopData.wifi_name.slice(0, 32)}</C>`;
-
-    if (shopData.wifi_password) {
-      receiptText += `
-    <C>Password: ${shopData.wifi_password.slice(0, 32)}</C>`;
-    }
-  }
-
-  return receiptText;
+${buildReceiptFooter(shopData)}`;
 }

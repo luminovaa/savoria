@@ -4,14 +4,12 @@ export type User = {
   created_at?: string;
   name?: string;
   password?: string;
-  last_sign_in_at?: string;
   role: Role | Role[];
 }
 
 export type UserList = {
   id: string;
   email: string;
-  last_sign_in_at?: string;
   full_name?: string;
   role?: Role;
   role_name?: string;

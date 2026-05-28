@@ -30,6 +30,7 @@ import {
   PrinterPickerModal,
   useReceiptPrinter,
 } from "@/services/receipt-printer";
+import { useAuth } from "@/context/auth-provider";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const isTablet = SCREEN_WIDTH > 600;
@@ -54,6 +55,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const [loading, setLoading] = useState(true);
   const [invoiceNumber, setInvoiceNumber] = useState<string>("");
   const { colors } = useTheme();
+  const { user } = useAuth();
   const {
     modalVisible,
     setModalVisible,
@@ -208,6 +210,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       const receiptText = buildCheckoutReceiptText({
         shopData,
         customer,
+        cashier: user?.full_name,
         invoiceNumber,
         paymentType,
         total,

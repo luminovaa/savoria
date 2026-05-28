@@ -137,12 +137,6 @@ export default function UsersListScreen() {
         <Text style={[styles.userMeta, { color: colors.textSecondary }]}>
           Email: {item.email}
         </Text>
-        <Text style={[styles.userMeta, { color: colors.textSecondary }]}>
-          Terakhir login:{" "}
-          {item.last_sign_in_at
-            ? new Date(item.last_sign_in_at).toLocaleDateString()
-            : "-"}
-        </Text>
       </View>
       <View style={styles.roleContainer}>
         <Text style={[styles.roleText, { color: colors.primary }]}>

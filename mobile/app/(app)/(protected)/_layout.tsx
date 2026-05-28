@@ -5,9 +5,15 @@ import TabletNavbar from "@/components/navbar/tablet";
 import MobileNavbar from "@/components/navbar/mobile";
 import Navbar from "@/components/navbar/mobile-top";
 import { useAuth } from "@/context/auth-provider";
+import { useTheme } from "@/hooks/use-theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+const MOBILE_NAV_HEIGHT = 60;
 
 export default function ProtectedLayout() {
   const { initialized, user } = useAuth();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [isMobile, setIsMobile] = useState(true);
 
   useEffect(() => {
@@ -28,9 +34,18 @@ export default function ProtectedLayout() {
   const styles = StyleSheet.create({
     container: {
       flex: 1,
+      backgroundColor: colors.background,
     },
     content: {
       flex: 1,
+      paddingBottom: isMobile ? MOBILE_NAV_HEIGHT + insets.bottom : 0,
+      backgroundColor: colors.background,
+    },
+    mobileNav: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
     },
   });
 
@@ -44,7 +59,11 @@ export default function ProtectedLayout() {
       <View style={styles.content}>
         <Slot />
       </View>
-      {isMobile && <MobileNavbar />}
+      {isMobile && (
+        <View style={styles.mobileNav}>
+          <MobileNavbar />
+        </View>
+      )}
     </View>
   );
 }

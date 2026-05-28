@@ -13,9 +13,11 @@ import { useRouter } from "expo-router";
 import { useTheme } from "@/hooks/use-theme";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useAuth } from "@/context/auth-provider";
 
 export default function SplashScreenComponent() {
   const { colors, theme } = useTheme();
+  const { initialized, user } = useAuth();
   const router = useRouter();
   const screenWidth = Dimensions.get("window").width;
   const isTablet = screenWidth > 600;
@@ -68,12 +70,24 @@ export default function SplashScreenComponent() {
       ]),
     ]).start();
 
+    if (!initialized) return;
+
     const timer = setTimeout(() => {
-      router.replace("/(app)/sign-in");
-    }, 3000);
+      router.replace(user ? "/(app)/(protected)/home" : "/(app)/sign-in");
+    }, user ? 0 : 3000);
 
     return () => clearTimeout(timer);
-  }, [fadeAnim, scaleAnim, logoTranslateY, loadingOpacity, loadingScale, taglineOpacity, router]);
+  }, [
+    fadeAnim,
+    initialized,
+    loadingOpacity,
+    loadingScale,
+    logoTranslateY,
+    router,
+    scaleAnim,
+    taglineOpacity,
+    user,
+  ]);
 
   const spinValue = useRef(new Animated.Value(0)).current;
   

@@ -32,7 +32,7 @@ const formSchema = z.object({
 });
 
 export default function SignIn() {
-  const { signInWithPassword } = useAuth();
+  const { initialized, signInWithPassword, user } = useAuth();
   const { colors, theme } = useTheme();
   const [secureTextEntry, setSecureTextEntry] = React.useState(true);
   const router = useRouter();
@@ -136,6 +136,12 @@ export default function SignIn() {
       password: "",
     },
   });
+
+  React.useEffect(() => {
+    if (initialized && user) {
+      router.replace("/(app)/(protected)/home");
+    }
+  }, [initialized, router, user]);
 
   async function onSubmit(data: z.infer<typeof formSchema>) {
     try {

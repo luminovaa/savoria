@@ -139,6 +139,11 @@ func TestRoleAuthorization(t *testing.T) {
 	if got := call(f.server, http.MethodGet, "/v1/users/00000000-0000-0000-0000-000000000000", f.kasir, nil).Code; got != http.StatusForbidden {
 		t.Fatalf("kasir get user detail = %d, want 403", got)
 	}
+	if got := call(f.server, http.MethodPut, "/v1/shop", f.kasir, map[string]any{
+		"name": "Savoria Kasir", "address": "Jombang", "phone": "0800", "wifi_name": "Savoria", "wifi_password": "rahasia",
+	}).Code; got != http.StatusOK {
+		t.Fatalf("kasir update shop = %d, want 200", got)
+	}
 }
 
 func TestListMenusSortsInBackend(t *testing.T) {
