@@ -66,32 +66,42 @@ func (s *Server) checkout(w http.ResponseWriter, r *http.Request) {
 		Quantity  int
 		UnitPrice float64
 	}
-	lines := make([]priced, 0, len(input.Items))
-	totalItems := 0
-	totalAmount := 0.0
+	quantities := map[int64]int{}
+	menuIDs := make([]int64, 0, len(input.Items))
 	for _, requested := range input.Items {
-		if requested.Quantity <= 0 {
+		if requested.MenuID <= 0 || requested.Quantity <= 0 {
 			writeError(w, http.StatusBadRequest, "jumlah item tidak valid")
 			return
 		}
+		if _, ok := quantities[requested.MenuID]; !ok {
+			menuIDs = append(menuIDs, requested.MenuID)
+		}
+		quantities[requested.MenuID] += requested.Quantity
+	}
+
+	lines := make([]priced, 0, len(menuIDs))
+	totalItems := 0
+	totalAmount := 0.0
+	for _, menuID := range menuIDs {
+		quantity := quantities[menuID]
 		var name string
 		var price float64
 		var stock int
 		err = tx.QueryRow(r.Context(), `select name_menu,
 			case when promo and promo_price is not null and current_date between promo_start and promo_end then promo_price else price end,
-			stock from menus where id=$1 and is_deleted=false and is_archive=false for update`, requested.MenuID).
+			stock from menus where id=$1 and is_deleted=false and is_archive=false for update`, menuID).
 			Scan(&name, &price, &stock)
 		if err != nil {
 			writeError(w, http.StatusConflict, "menu tidak tersedia")
 			return
 		}
-		if stock < requested.Quantity {
+		if stock < quantity {
 			writeError(w, http.StatusConflict, fmt.Sprintf("stok %s tidak cukup", name))
 			return
 		}
-		totalItems += requested.Quantity
-		totalAmount += price * float64(requested.Quantity)
-		lines = append(lines, priced{MenuID: requested.MenuID, Quantity: requested.Quantity, UnitPrice: price})
+		totalItems += quantity
+		totalAmount += price * float64(quantity)
+		lines = append(lines, priced{MenuID: menuID, Quantity: quantity, UnitPrice: price})
 	}
 	changes := 0.0
 	if input.PaymentType == "cash" {

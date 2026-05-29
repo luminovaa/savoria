@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useRef, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -52,7 +52,8 @@ type InvoiceCartProps = {
 
 export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isRefreshingMenus, setIsRefreshingMenus] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState<string>("");
   const { colors } = useTheme();
   const { user } = useAuth();
@@ -82,43 +83,63 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const [paidAmount, setPaidAmount] = useState<number | null>(null);
   const [changes, setChanges] = useState<number | null>(null);
   const [confirmedTotal, setConfirmedTotal] = useState<number | null>(null);
+  const [confirmedOrderId, setConfirmedOrderId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const clientOrderId = useRef<string | null>(null);
+  const fetchVersion = useRef(0);
+  const cartIds = useMemo(
+    () => Object.keys(cart).filter((id) => (cart[id] || 0) > 0).sort(),
+    [cart]
+  );
+  const cartKey = cartIds.join(",");
 
   const fetchMenuItems = async (cartIds: string[]) => {
+    const requestVersion = ++fetchVersion.current;
+    const sortedCartIds = [...cartIds].sort();
     try {
-      setLoading(true);
+      if (menuItems.length === 0) {
+        setInitialLoading(true);
+      }
+      setIsRefreshingMenus(true);
       const data = await queryClient.fetchQuery({
-        queryKey: ["checkout-menus", cartIds.sort().join(",")],
+        queryKey: ["checkout-menus", sortedCartIds.join(",")],
         staleTime: 2 * 60 * 1000,
         queryFn: async () => {
           const { data, error } = await api
-          .from("menu")
-          .select("id, name_menu, price, promo, promo_price, promo_start, promo_end, images, stock")
-          .in("id", cartIds);
+            .from("menu")
+            .select("id, name_menu, price, promo, promo_price, promo_start, promo_end, images, stock")
+            .in("id", sortedCartIds);
           if (error) throw error;
           return (data || []) as MenuItem[];
         },
       });
-      setMenuItems(data);
+      if (requestVersion === fetchVersion.current) {
+        setMenuItems(data);
+      }
     } catch (error) {
       console.error("Error fetching menu items for cart:", error);
     } finally {
-      setLoading(false);
+      if (requestVersion === fetchVersion.current) {
+        setInitialLoading(false);
+        setIsRefreshingMenus(false);
+      }
     }
   };
 
   useEffect(() => {
-    if (Object.keys(cart).length > 0) {
-      fetchMenuItems(Object.keys(cart));
+    if (cartIds.length > 0) {
+      fetchMenuItems(cartIds);
     } else {
+      fetchVersion.current += 1;
       setMenuItems([]);
-      setLoading(false);
+      setInitialLoading(false);
+      setIsRefreshingMenus(false);
       clientOrderId.current = null;
       setInvoiceNumber("");
       setCustomer("");
+      setConfirmedOrderId(null);
     }
-  }, [cart]);
+  }, [cartKey]);
 
   const calculateSubtotal = (item: MenuItem, quantity: number) => {
     const price = isPromoActive(item) ? item.promo_price! : item.price;
@@ -130,6 +151,28 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       const quantity = cart[item.id.toString()] || 0;
       return sum + calculateSubtotal(item, quantity);
     }, 0);
+  };
+
+  const getValidatedCartItems = (showAlert = true) => {
+    const itemsByID = new Map(menuItems.map((item) => [item.id.toString(), item]));
+    const missingIds = cartIds.filter((id) => !itemsByID.has(id));
+
+    if (cartIds.length === 0) {
+      if (showAlert) Alert.alert("Error", "Belum ada item di keranjang");
+      return null;
+    }
+
+    if (isRefreshingMenus || missingIds.length > 0 || menuItems.length !== cartIds.length) {
+      if (showAlert) {
+        Alert.alert(
+          "Data menu belum lengkap",
+          "Tunggu sebentar lalu coba checkout ulang agar semua item pesanan ikut tersimpan."
+        );
+      }
+      return null;
+    }
+
+    return cartIds.map((id) => itemsByID.get(id)!);
   };
 
   const updateQuantity = (id: string, delta: number) => {
@@ -156,10 +199,14 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
 
   const handleOrder = async () => {
     try {
+      const validatedItems = getValidatedCartItems();
+      if (!validatedItems) return;
+      const total = calculateTotal();
+
       // Validasi pembayaran
       if (
         paymentType === "cash" &&
-        (!paidAmount || paidAmount < calculateTotal())
+        (!paidAmount || paidAmount < total)
       ) {
         Alert.alert("Error", "Jumlah pembayaran tidak mencukupi");
         return;
@@ -172,13 +219,16 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       const order = await submitOrder({
         client_order_id: clientOrderId.current,
         customer: customer.trim(),
-        items: menuItems.map((item) => ({
-          menu_id: item.id,
-          quantity: cart[item.id.toString()],
-        })),
+        items: Object.entries(cart)
+          .filter(([, quantity]) => quantity > 0)
+          .map(([id, quantity]) => ({
+            menu_id: Number(id),
+            quantity,
+          })),
         payment_type: paymentType,
         paid: paymentType === "cash" ? paidAmount : null,
       });
+      setConfirmedOrderId(order.order_id);
       setInvoiceNumber(order.invoice_number);
       setChanges(order.changes);
       setConfirmedTotal(order.total_amount);
@@ -199,27 +249,37 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
 
   const connectAndPrint = async (inner_mac_address: string) => {
     try {
-      const total = confirmedTotal ?? calculateTotal();
+      if (!confirmedOrderId) {
+        Alert.alert("Error", "Pesanan belum terkonfirmasi");
+        return;
+      }
       const { data: shopData, error: shopError } = await api
         .from("shop")
         .select("name, address, phone, wifi_name, wifi_password")
         .single();
 
       if (shopError) throw shopError;
+      const { data: orderData, error: orderError } = await api
+        .from("orders")
+        .select("*")
+        .eq("id", confirmedOrderId)
+        .single();
+
+      if (orderError) throw orderError;
 
       const receiptText = buildCheckoutReceiptText({
         shopData,
-        customer,
-        cashier: user?.full_name,
-        invoiceNumber,
-        paymentType,
-        total,
-        paid: paidAmount,
-        changes,
-        items: menuItems.map((item) => ({
-          name_menu: item.name_menu,
-          quantity: cart[item.id.toString()],
-          subtotal: calculateSubtotal(item, cart[item.id.toString()]),
+        customer: orderData.customer || customer,
+        cashier: orderData.user?.full_name || user?.full_name,
+        invoiceNumber: orderData.invoice_number || invoiceNumber,
+        paymentType: orderData.payment_type || paymentType,
+        total: orderData.total_amount ?? confirmedTotal ?? calculateTotal(),
+        paid: orderData.paid ?? paidAmount,
+        changes: orderData.changes ?? changes,
+        items: (orderData.items || []).map((item: any) => ({
+          name_menu: item.menu?.name_menu,
+          quantity: item.quantity,
+          subtotal: item.subtotal,
         })),
       });
 
@@ -231,6 +291,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       setPaidAmount(null);
       setChanges(null);
       setConfirmedTotal(null);
+      setConfirmedOrderId(null);
       setInvoiceNumber("");
       setCustomer("");
       clientOrderId.current = null;
@@ -246,6 +307,8 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
   const getTotalItems = () => {
     return Object.values(cart).reduce((sum, qty) => sum + qty, 0);
   };
+
+  const cartDataComplete = getValidatedCartItems(false) !== null;
 
   const styles = StyleSheet.create({
     modalContainer: {
@@ -503,11 +566,26 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
       flexDirection: "row",
       marginBottom: 15,
     },
+    orderButtonDisabled: {
+      opacity: 0.55,
+    },
     orderButtonText: {
       fontSize: isTablet ? 13 : 14,
       fontWeight: "bold",
       color: colors.card,
       marginLeft: 8,
+    },
+    refreshStatus: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 8,
+      marginBottom: 8,
+    },
+    refreshStatusText: {
+      marginLeft: 8,
+      fontSize: isTablet ? 12 : 11,
+      color: colors.textSecondary,
     },
     emptyContainer: {
       flex: isTablet ? 1 : 0,
@@ -582,7 +660,7 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
     },
   });
 
-  if (loading) {
+  if (initialLoading && menuItems.length === 0 && cartIds.length > 0) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -716,6 +794,13 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
         </View>
       )}
 
+      {isRefreshingMenus && menuItems.length > 0 && (
+        <View style={styles.refreshStatus}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.refreshStatusText}>Memuat item...</Text>
+        </View>
+      )}
+
       {menuItems.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Feather
@@ -827,9 +912,12 @@ export default function InvoiceCart({ cart, setCart }: InvoiceCartProps) {
           </View>
 
           <TouchableOpacity
-            style={styles.orderButton}
+            style={[
+              styles.orderButton,
+              (!cartDataComplete || printing) && styles.orderButtonDisabled,
+            ]}
             onPress={handleOrder}
-            disabled={printing}
+            disabled={!cartDataComplete || printing}
           >
             {printing ? (
               <ActivityIndicator color={colors.card} />

@@ -99,6 +99,15 @@ func checkoutBody(id string, menuID int64, quantity int, paid float64) map[strin
 	}
 }
 
+func insertMenu(t *testing.T, f integrationFixture, name string, price float64, stock int) int64 {
+	t.Helper()
+	var id int64
+	if err := f.server.DB.QueryRow(context.Background(), `insert into menus(name_menu,price,stock) values($1,$2,$3) returning id`, name, price, stock).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
 func TestRoleAuthorization(t *testing.T) {
 	f := fixture(t, 3)
 	if got := call(f.server, http.MethodGet, "/v1/menus", "", nil).Code; got != http.StatusUnauthorized {
@@ -227,6 +236,132 @@ func TestCheckoutIdempotentAndValidatesPayment(t *testing.T) {
 	}
 	if got := call(f.server, http.MethodPost, "/v1/orders/checkout", f.token, checkoutBody("low-pay", f.menuID, 1, 1)).Code; got != http.StatusBadRequest {
 		t.Fatalf("pembayaran kurang = %d, want 400", got)
+	}
+}
+
+func TestCheckoutStoresAllMultiItemLines(t *testing.T) {
+	f := fixture(t, 10)
+	ctx := context.Background()
+	teaID := insertMenu(t, f, "Teh", 7000, 8)
+	cakeID := insertMenu(t, f, "Cake", 15000, 6)
+	body := map[string]any{
+		"client_order_id": "multi-item-order",
+		"items": []map[string]any{
+			{"menu_id": f.menuID, "quantity": 2},
+			{"menu_id": teaID, "quantity": 3},
+			{"menu_id": cakeID, "quantity": 1},
+		},
+		"payment_type": "cash",
+		"paid":         100000,
+		"customer":     "Budi",
+	}
+
+	res := call(f.server, http.MethodPost, "/v1/orders/checkout", f.token, body)
+	if got := res.Code; got != http.StatusCreated {
+		t.Fatalf("checkout multi-item = %d %s, want 201", got, res.Body.String())
+	}
+	var result checkoutResult
+	_ = json.NewDecoder(res.Body).Decode(&result)
+
+	var total int
+	var amount float64
+	if err := f.server.DB.QueryRow(ctx, `select total,total_amount from orders where id=$1`, result.OrderID).Scan(&total, &amount); err != nil {
+		t.Fatal(err)
+	}
+	if total != 6 || amount != 56000 {
+		t.Fatalf("order total/amount = %d/%.0f, want 6/56000", total, amount)
+	}
+
+	rows, err := f.server.DB.Query(ctx, `select menu_id,quantity,subtotal from order_items where order_id=$1`, result.OrderID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	gotItems := map[int64]struct {
+		quantity int
+		subtotal float64
+	}{}
+	for rows.Next() {
+		var menuID int64
+		var quantity int
+		var subtotal float64
+		if err := rows.Scan(&menuID, &quantity, &subtotal); err != nil {
+			t.Fatal(err)
+		}
+		gotItems[menuID] = struct {
+			quantity int
+			subtotal float64
+		}{quantity: quantity, subtotal: subtotal}
+	}
+	wantItems := map[int64]struct {
+		quantity int
+		subtotal float64
+	}{
+		f.menuID: {quantity: 2, subtotal: 20000},
+		teaID:    {quantity: 3, subtotal: 21000},
+		cakeID:   {quantity: 1, subtotal: 15000},
+	}
+	if len(gotItems) != len(wantItems) {
+		t.Fatalf("order_items len = %d, want %d (%+v)", len(gotItems), len(wantItems), gotItems)
+	}
+	for menuID, want := range wantItems {
+		if got, ok := gotItems[menuID]; !ok || got != want {
+			t.Fatalf("item %d = %+v present=%v, want %+v", menuID, got, ok, want)
+		}
+	}
+
+	stocks := map[int64]int{}
+	stockRows, err := f.server.DB.Query(ctx, `select id,stock from menus where id in ($1,$2,$3)`, f.menuID, teaID, cakeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stockRows.Close()
+	for stockRows.Next() {
+		var menuID int64
+		var stock int
+		if err := stockRows.Scan(&menuID, &stock); err != nil {
+			t.Fatal(err)
+		}
+		stocks[menuID] = stock
+	}
+	if stocks[f.menuID] != 8 || stocks[teaID] != 5 || stocks[cakeID] != 5 {
+		t.Fatalf("stocks = %+v, want kopi=8 teh=5 cake=5", stocks)
+	}
+
+	detail := call(f.server, http.MethodGet, "/v1/orders/"+result.OrderID, f.token, nil)
+	if got := detail.Code; got != http.StatusOK {
+		t.Fatalf("order detail = %d %s, want 200", got, detail.Body.String())
+	}
+	var detailBody struct {
+		Items []map[string]any `json:"items"`
+	}
+	_ = json.NewDecoder(detail.Body).Decode(&detailBody)
+	if len(detailBody.Items) != 3 {
+		t.Fatalf("detail items len = %d, want 3", len(detailBody.Items))
+	}
+}
+
+func TestCheckoutAggregatesDuplicateMenuIDsBeforeStockValidation(t *testing.T) {
+	f := fixture(t, 3)
+	body := map[string]any{
+		"client_order_id": "duplicate-menu",
+		"items": []map[string]any{
+			{"menu_id": f.menuID, "quantity": 2},
+			{"menu_id": f.menuID, "quantity": 2},
+		},
+		"payment_type": "cash",
+		"paid":         100000,
+		"customer":     "Budi",
+	}
+	res := call(f.server, http.MethodPost, "/v1/orders/checkout", f.token, body)
+	if got := res.Code; got != http.StatusConflict {
+		t.Fatalf("duplicate over stock checkout = %d %s, want 409", got, res.Body.String())
+	}
+	var stock, orders int
+	_ = f.server.DB.QueryRow(context.Background(), `select stock from menus where id=$1`, f.menuID).Scan(&stock)
+	_ = f.server.DB.QueryRow(context.Background(), `select count(*) from orders`).Scan(&orders)
+	if stock != 3 || orders != 0 {
+		t.Fatalf("stock/orders = %d/%d, want 3/0", stock, orders)
 	}
 }
 

@@ -187,12 +187,14 @@ export default function OrderDetailsScreen() {
       const message = `Detail Pesanan
           Invoice: ${order.invoice_number}
           Tanggal: ${formatDate(order.created_at)}
-          Status: ${order.status}
-          Pembayaran: ${order.payment_type}
-          Total: ${formatCurrency(order.total_amount)}
+           Status: ${order.status}
+           Pembayaran: ${order.payment_type}
+           Total: ${formatCurrency(order.total_amount)}
+           Dibayar: ${formatCurrency(order.paid || 0)}
+           Kembalian: ${formatCurrency(order.changes || 0)}
 
-          Item Pesanan:
-          ${itemsList}`;
+           Item Pesanan:
+           ${itemsList}`;
 
       await Share.share({
         message,
@@ -585,6 +587,18 @@ export default function OrderDetailsScreen() {
               <Text style={styles.summaryLabel}>Total</Text>
               <Text style={styles.summaryValue}>
                 {formatCurrency(order.total_amount || 0)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Dibayar</Text>
+              <Text style={styles.summaryValue}>
+                {formatCurrency(order.paid || 0)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Kembalian</Text>
+              <Text style={styles.summaryValue}>
+                {formatCurrency(order.changes || 0)}
               </Text>
             </View>
             <View style={styles.totalRow}>
