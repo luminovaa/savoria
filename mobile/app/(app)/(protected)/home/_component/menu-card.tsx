@@ -23,7 +23,7 @@ import { Feather } from "@expo/vector-icons";
 import MenuActionModal from "./modal-menu";
 import UpdateStockModal from "./update-stock-modal"; // Import modal baru
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { dataService } from "@/services/data-service";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -65,7 +65,6 @@ export default function MainCardMenu({
   usePlainGrid = false,
 }: MainCardMenuProps) {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const { colors } = useTheme();
   const router = useRouter();
@@ -82,49 +81,37 @@ export default function MainCardMenu({
   const [stockUpdateMenuItem, setStockUpdateMenuItem] =
     useState<MenuItem | null>(null);
 
-  const fetchMenuItems = async () => {
-    try {
-      setLoading(true);
-
-      const finalMenuData = await queryClient.fetchQuery({
-        queryKey: ["menus", selectedCategory, menuSort],
-        staleTime: 5 * 60 * 1000,
-        queryFn: async () => {
-          return dataService.menus(selectedCategory, false, menuSort);
-        },
-      });
-
-      setMenuItems([
-        ...(finalMenuData as MenuItem[]),
-        {
-          id: 0,
-          name_menu: "Tambah Menu",
-          description: "",
-          price: 0,
-          category_id: 0,
-          images: "",
-          promo: false,
-          promo_price: null,
-          promo_start: null,
-          promo_end: null,
-          created_at: "",
-          updated_at: "",
-          isAddButton: true,
-          is_deleted: false,
-          is_archive: false,
-          stock: 0,
-        },
-      ]);
-    } catch (error) {
-      console.error("Error fetching menu items:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: menuData = [], isLoading } = useQuery<MenuItem[]>({
+    queryKey: ["menus", selectedCategory, menuSort],
+    queryFn: () => dataService.menus(selectedCategory, false, menuSort),
+    staleTime: Infinity,
+    gcTime: 60 * 60 * 1000,
+    refetchOnReconnect: false,
+  });
 
   useEffect(() => {
-    fetchMenuItems();
-  }, [selectedCategory, menuSort]);
+    setMenuItems([
+      ...menuData,
+      {
+        id: 0,
+        name_menu: "Tambah Menu",
+        description: "",
+        price: 0,
+        category_id: 0,
+        images: "",
+        promo: false,
+        promo_price: null,
+        promo_start: null,
+        promo_end: null,
+        created_at: "",
+        updated_at: "",
+        isAddButton: true,
+        is_deleted: false,
+        is_archive: false,
+        stock: 0,
+      },
+    ]);
+  }, [menuData]);
 
   useEffect(() => {
     const prefetchImages = async () => {
@@ -238,6 +225,9 @@ export default function MainCardMenu({
       if (error) throw error;
 
       setMenuItems(menuItems.filter((item) => item.id !== menuId));
+      queryClient.setQueriesData<MenuItem[]>({ queryKey: ["menus"] }, (oldData) =>
+        oldData?.filter((item) => item.id !== menuId)
+      );
       await queryClient.invalidateQueries({ queryKey: ["menus"] });
       Alert.alert("Sukses", "Menu berhasil dihapus");
     } catch (error: any) {
@@ -253,6 +243,9 @@ export default function MainCardMenu({
       });
 
       setMenuItems(menuItems.filter((menu) => menu.id !== item.id));
+      queryClient.setQueriesData<MenuItem[]>({ queryKey: ["menus"] }, (oldData) =>
+        oldData?.filter((menu) => menu.id !== item.id)
+      );
       await queryClient.invalidateQueries({ queryKey: ["menus"] });
       Alert.alert("Sukses", "Menu berhasil diarsipkan");
     } catch (error: any) {
@@ -272,6 +265,9 @@ export default function MainCardMenu({
       prevItems.map((item) =>
         item.id === menuId ? { ...item, stock: newStock } : item
       )
+    );
+    queryClient.setQueriesData<MenuItem[]>({ queryKey: ["menus"] }, (oldData) =>
+      oldData?.map((item) => (item.id === menuId ? { ...item, stock: newStock } : item))
     );
     queryClient.invalidateQueries({ queryKey: ["menus"] });
   };
@@ -642,7 +638,7 @@ export default function MainCardMenu({
     }
   );
 
-  if (loading) {
+  if (isLoading && menuItems.length === 0) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
         <ActivityIndicator size="large" color={colors.primary} />

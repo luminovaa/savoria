@@ -1,5 +1,5 @@
 import { useTheme } from "@/hooks/use-theme";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { 
   StyleSheet, 
   View, 
@@ -10,9 +10,10 @@ import {
   Dimensions 
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { api } from "@/utils/api";
+import { dataService } from "@/services/data-service";
 import { capitalizeText } from "@/utils/format";
 import { Category } from "@/utils/types"; 
+import { useQuery } from "@tanstack/react-query";
 
 type TypeCardProps = {
   onCategorySelect: (categoryId: number | null) => void;
@@ -21,31 +22,16 @@ type TypeCardProps = {
 
 export default function TypeCard({ onCategorySelect, selectedCategory }: TypeCardProps) {
   const { colors } = useTheme();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
   const screenWidth = Dimensions.get("window").width;
   const isTablet = screenWidth > 600;
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await api
-        .from('category')
-        .select('*')
-        .order('name_category', { ascending: true });
-
-      if (error) throw error;
-      setCategories(data || []);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: categories = [], isLoading } = useQuery<Category[]>({
+    queryKey: ["categories"],
+    queryFn: dataService.categories,
+    staleTime: Infinity,
+    gcTime: 60 * 60 * 1000,
+    refetchOnReconnect: false,
+  });
 
   const getCategoryIcon = (categoryName: string) => {
     switch (categoryName.toLowerCase()) {
@@ -108,7 +94,7 @@ export default function TypeCard({ onCategorySelect, selectedCategory }: TypeCar
     },
   });
 
-  if (loading) {
+  if (isLoading) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="small" color={colors.primary} />

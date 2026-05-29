@@ -8,12 +8,17 @@ import { widthPercentageToDP as wp } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { MenuSort } from "@/utils/types";
 
+const homeState = {
+  selectedCategory: null as number | null,
+  menuSort: "newest" as MenuSort,
+};
+
 export default function HomeScreen() {
   const { colors } = useTheme();
   const screenWidth = Dimensions.get("window").width;
   const isTablet = screenWidth > 600;
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
-  const [menuSort, setMenuSort] = useState<MenuSort>("newest");
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(homeState.selectedCategory);
+  const [menuSort, setMenuSortState] = useState<MenuSort>(homeState.menuSort);
   const [cart, setCart] = useState<{ [id: string]: number }>({});
 
   const styles = StyleSheet.create({
@@ -70,7 +75,14 @@ export default function HomeScreen() {
   });
 
   const handleCategorySelect = (categoryId: number | null) => {
-    setSelectedCategory(selectedCategory === categoryId ? null : categoryId);
+    const nextCategory = selectedCategory === categoryId ? null : categoryId;
+    homeState.selectedCategory = nextCategory;
+    setSelectedCategory(nextCategory);
+  };
+
+  const setMenuSort = (sort: MenuSort) => {
+    homeState.menuSort = sort;
+    setMenuSortState(sort);
   };
 
   return (
